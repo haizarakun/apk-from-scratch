@@ -21,6 +21,21 @@ semantic versioning once it has a tagged release.
   decompression, and raise `MalformedError` instead of hanging or crashing on
   malformed/hostile input.
 
+### Real apps without code
+- **App spec** (`apkfs/appspec.py`): describe a screen in JSON — texts and
+  buttons, each button with an action (`set_text`, `open_url`, `toast`) — and
+  get a signed APK with a vertical layout and a real `onClick` dispatcher,
+  all hand-assembled. `apkforge --spec app.json`. Example in
+  `examples/spec_app/app.json`.
+- **Signing keys** (`apkfs/keys.py`): `apkforge keygen` creates a P-256
+  key + certificate PEM; `--key` signs with it so updates install over older
+  versions (Android matches on the certificate). Fingerprint shown on creation.
+- Browser flow: the "Make an APK" workflow accepts an app spec and signs with
+  the `APK_SIGNING_KEY` secret; a "Create signing key" workflow makes the key
+  (refuses to run on public repos so the key cannot leak via artifacts).
+- New Dalvik encoders: `const` (32-bit), `check-cast`, `move-result`,
+  `if-eq`/`if-ne`.
+
 ### Ease of use
 - **Browser-only build**: a `workflow_dispatch` GitHub Action ("Make an APK
   (no coding)") lets anyone build an APK from a form and download it — no

@@ -1,28 +1,46 @@
 name: Make an APK (no coding)
 
 # Build an APK from a form in your browser — no command line, no setup.
-# Go to the Actions tab, pick "Make an APK (no coding)", press "Run workflow",
-# fill in the boxes, and download the finished .apk from the run's Artifacts.
+# Actions tab -> "Make an APK (no coding)" -> Run workflow -> fill the boxes
+# -> download the .apk from the run's Artifacts.
+#
+# Two ways to describe the app:
+#   * Simple: fill App id / App name / Text / Icon color (one-screen app).
+#   * Full:   paste a JSON "app spec" into App spec (JSON) — several texts and
+#             buttons with actions (change text, open a site, show a message).
+#             The spec overrides the simple fields. See docs/EASY.ja.md.
+#
+# Signing: if you saved a key as the repository secret APK_SIGNING_KEY (see
+# the "Create signing key" workflow), every build is signed with it, so newer
+# versions install over older ones. Without it a throwaway key is used.
 
 on:
   workflow_dispatch:
     inputs:
       app_id:
         description: "App id (reverse-domain, e.g. com.yourname.hello)"
-        required: true
+        required: false
         default: "com.example.hello"
       app_name:
         description: "App name (shown under the icon)"
-        required: true
+        required: false
         default: "My App"
       message:
         description: "Text the app shows on screen"
-        required: true
+        required: false
         default: "Hello from my app!"
       icon_color:
         description: "Icon color (6 hex digits, e.g. 1E88E5)"
-        required: true
+        required: false
         default: "1E88E5"
+      version_code:
+        description: "Version number (raise it by 1 for each update)"
+        required: false
+        default: "1"
+      app_spec:
+        description: "App spec (JSON) — optional; several widgets + actions"
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -34,16 +52,60 @@ jobs:
           python-version: "3.11"
       - name: Install apk-from-scratch
         run: pip install .
-      - name: Build the APK
+
+      - name: Prepare the signing key
+        id: key
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
         run: |
-          apkforge \
-            --package "${{ inputs.app_id }}" \
-            --label "${{ inputs.app_name }}" \
-            --message "${{ inputs.message }}" \
-            --icon-color "${{ inputs.icon_color }}" \
-            -o "app.apk"
+          if [ -n "$APK_SIGNING_KEY" ]; then
+            printf '%s' "$APK_SIGNING_KEY" > signing-key.pem
+            chmod 600 signing-key.pem
+            echo "mode=saved" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=throwaway" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the APK
+        env:
+          APP_SPEC: ${{ inputs.app_spec }}
+        run: |
+          KEYARG=""
+          if [ -f signing-key.pem ]; then KEYARG="--key signing-key.pem"; fi
+          if [ -n "$APP_SPEC" ]; then
+            printf '%s' "$APP_SPEC" > app.json
+            python3 - <<'PY'
+          import json, sys
+          spec = json.load(open("app.json", encoding="utf-8"))
+          spec.setdefault("version_code", int("${{ inputs.version_code }}" or 1))
+          json.dump(spec, open("app.json", "w", encoding="utf-8"), ensure_ascii=False)
+          PY
+            apkforge --spec app.json $KEYARG -o app.apk
+          else
+            apkforge \
+              --package "${{ inputs.app_id }}" \
+              --label "${{ inputs.app_name }}" \
+              --message "${{ inputs.message }}" \
+              --icon-color "${{ inputs.icon_color }}" \
+              --version-code "${{ inputs.version_code }}" \
+              $KEYARG -o app.apk
+          fi
+
       - name: Check it is a valid, signed APK
         run: python3 -m apkfs.verify app.apk
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f signing-key.pem
+
+      - name: Explain the signing mode
+        run: |
+          if [ "${{ steps.key.outputs.mode }}" = "saved" ]; then
+            echo "✅ Signed with your saved key (APK_SIGNING_KEY). Updates will install over older versions." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⚠️ Signed with a throwaway key. To make updatable apps, run the 'Create signing key' workflow once and save the key as the secret APK_SIGNING_KEY." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload the APK to download
         uses: actions/upload-artifact@v4
         with:

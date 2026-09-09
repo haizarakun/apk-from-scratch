@@ -245,6 +245,77 @@ def test_decoders_reject_malformed_input_cleanly():
                 pass  # MalformedError (a ValueError subclass) or a clean reject
 
 
+SPEC = {
+    "package": "com.example.t", "name": "T", "icon_color": "1E88E5",
+    "widgets": [
+        {"type": "text", "id": "title", "text": "Hi"},
+        {"type": "button", "text": "Change",
+         "action": {"type": "set_text", "target": "title", "text": "Changed"}},
+        {"type": "button", "text": "Site",
+         "action": {"type": "open_url", "url": "https://example.com"}},
+        {"type": "button", "text": "Toast",
+         "action": {"type": "toast", "text": "Hey"}},
+    ],
+}
+
+
+def test_appspec_generates_layout_and_dispatching_onclick():
+    from apkfs import appspec
+    from androguard.core.dex import DEX
+    d = DEX(appspec.build_dex(SPEC))
+    (cls,) = d.get_classes()
+    assert "Landroid/view/View$OnClickListener;" in cls.get_interfaces()
+    code = {m.get_name(): "\n".join(
+        i.get_name() + " " + i.get_output()
+        for i in m.get_code().get_bc().get_instructions())
+        for m in cls.get_methods() if m.get_code()}
+    on_create, on_click = code["onCreate"], code["onClick"]
+    assert on_create.count("new-instance") == 1 + 4     # layout + 4 widgets
+    assert on_create.count("setOnClickListener") == 3   # only buttons w/ actions
+    assert "LinearLayout;->setOrientation" in on_create
+    assert "getId()" in on_click and on_click.count("if-ne") == 3
+    assert "findViewById" in on_click and "check-cast" in on_click
+    assert "Landroid/net/Uri;->parse" in on_click
+    assert "Landroid/widget/Toast;->makeText" in on_click
+
+
+def test_appspec_rejects_bad_specs():
+    from apkfs import appspec
+    bad = [
+        {},                                                  # no package
+        {"package": "nodots", "widgets": [{"type": "text", "text": "x"}]},
+        {"package": "a.b", "widgets": []},                   # no widgets
+        {"package": "a.b", "widgets": [{"type": "slider", "text": "x"}]},
+        {"package": "a.b", "widgets": [                      # bad target
+            {"type": "button", "text": "b",
+             "action": {"type": "set_text", "target": "nope", "text": "y"}}]},
+        {"package": "a.b", "widgets": [                      # non-http url
+            {"type": "button", "text": "b",
+             "action": {"type": "open_url", "url": "javascript:alert(1)"}}]},
+    ]
+    for spec in bad:
+        try:
+            appspec.validate(spec)
+        except appspec.SpecError:
+            continue
+        raise AssertionError(f"spec accepted but should be rejected: {spec}")
+
+
+def test_same_key_signs_updates_with_same_certificate():
+    from apkfs import appspec, keys
+    from cryptography.hazmat.primitives import serialization
+    key, cert = keys.generate("test signer")
+    # Round-trip through PEM, as a user keeping the key file would.
+    key2, cert2 = keys.from_pem(keys.to_pem(key, cert))
+    der = cert.public_bytes(serialization.Encoding.DER)
+    v1 = appspec.build_from_spec({**SPEC, "version_code": 1}, (key2, cert2))
+    v2 = appspec.build_from_spec({**SPEC, "version_code": 2}, (key2, cert2))
+    # Both verify against the pinned certificate -> Android would accept v2
+    # as an update over v1.
+    assert verify.verify(v1, expected_cert_der=der)["authenticity_checked"]
+    assert verify.verify(v2, expected_cert_der=der)["authenticity_checked"]
+
+
 def test_mutf8_round_trips_japanese_and_emoji():
     import dex
     import decode
@@ -395,4 +466,7 @@ if __name__ == "__main__":
     test_stored_entries_are_four_byte_aligned()
     test_verify_pinning_rejects_a_resigned_apk()
     test_decoders_reject_malformed_input_cleanly()
+    test_appspec_generates_layout_and_dispatching_onclick()
+    test_appspec_rejects_bad_specs()
+    test_same_key_signs_updates_with_same_certificate()
     print("all tests passed")

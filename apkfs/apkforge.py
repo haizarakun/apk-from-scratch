@@ -64,12 +64,11 @@ def _build_dex(class_desc, message):
     return dx.build()
 
 
-def build_apk(package, label, message, icon_rgb, version_code=1,
-              version_name="1.0"):
-    """Assemble and sign a complete APK. Returns the bytes."""
-    class_desc = "L" + package.replace(".", "/") + "/Main;"
+def package_files(package, label, icon_rgb, classes_dex, version_code=1,
+                  version_name="1.0"):
+    """Assemble the manifest, resources and icon around a classes.dex.
+    Returns the {name: bytes} dict ready for apk.sign()."""
     activity = package + ".Main"
-
     resources = arsc.build(PACKAGE_ID, package, [label, ICON_PATH], [
         {"name": "string", "keys": ["app_name"],
          "entries": [(0, arsc.TYPE_STRING, 0)]},
@@ -80,15 +79,31 @@ def build_apk(package, label, message, icon_rgb, version_code=1,
         package, activity, label=axml.Ref(arsc.res_id(PACKAGE_ID, 1, 0)),
         icon=axml.Ref(arsc.res_id(PACKAGE_ID, 2, 0)),
         version_code=version_code, version_name=version_name)
-
-    files = {
+    return {
         "AndroidManifest.xml": manifest,
-        "classes.dex": _build_dex(class_desc, message),
+        "classes.dex": classes_dex,
         "resources.arsc": resources,
         ICON_PATH: png.solid_icon(rgb=icon_rgb),
     }
-    key = apk.make_keypair()
-    cert = apk.self_signed_cert(key)
+
+
+def build_apk(package, label, message, icon_rgb, version_code=1,
+              version_name="1.0", signing_key=None):
+    """Assemble and sign a complete one-screen APK. Returns the bytes.
+
+    signing_key: an optional (key, cert) pair from apkfs.keys. Pass the same
+    one every time so newer versions install over older ones; if omitted a
+    throwaway key is generated (fine for a first try, not for updates).
+    """
+    class_desc = "L" + package.replace(".", "/") + "/Main;"
+    files = package_files(package, label, icon_rgb,
+                          _build_dex(class_desc, message),
+                          version_code, version_name)
+    if signing_key is None:
+        key = apk.make_keypair()
+        cert = apk.self_signed_cert(key)
+    else:
+        key, cert = signing_key
     return apk.sign(files, key, cert)
 
 
@@ -132,18 +147,52 @@ def run_wizard():
     return 0
 
 
+def _keygen(argv):
+    """`apkforge keygen [-o key.pem]` — create a signing key to keep."""
+    from apkfs import keys
+    p = argparse.ArgumentParser(prog="apkforge keygen",
+                                description="Create a signing key (PEM).")
+    p.add_argument("-o", "--out", default="signing-key.pem")
+    p.add_argument("--name", default="apk-from-scratch signer",
+                   help="certificate common name")
+    a = p.parse_args(argv)
+    if pathlib.Path(a.out).exists():
+        print(f"refusing to overwrite existing key: {a.out}")
+        return 1
+    key, cert = keys.generate(a.name)
+    keys.save(a.out, key, cert)
+    print(f"wrote {a.out}")
+    print(f"certificate SHA-256: {keys.fingerprint(cert)}")
+    print("Keep this file safe and private. Use it for every build "
+          "(--key) so updates install over older versions.")
+    return 0
+
+
+def _load_signing_key(path):
+    from apkfs import keys
+    if path is None:
+        return None
+    return keys.load(path)
+
+
 def main(argv=None):
+    import sys
+    raw = sys.argv[1:] if argv is None else list(argv)
+
+    # `apkforge keygen ...` is a subcommand for key management.
+    if raw[:1] == ["keygen"]:
+        return _keygen(raw[1:])
+
     # No arguments at an interactive terminal -> friendly question-and-answer
     # wizard, so a first-time user needs no flags at all.
-    import sys
-    if argv is None and len(sys.argv) == 1 and sys.stdin.isatty():
+    if not raw and sys.stdin.isatty():
         return run_wizard()
 
     p = argparse.ArgumentParser(
         description="Build a signed Android APK with no Android SDK. "
-                    "Run with no options for an interactive wizard.")
-    p.add_argument("--package", required=True,
-                   help="application id, e.g. com.example.hello")
+                    "Run with no options for an interactive wizard; "
+                    "`apkforge keygen` creates a reusable signing key.")
+    p.add_argument("--package", help="application id, e.g. com.example.hello")
     p.add_argument("--label", default="From Scratch", help="app name")
     p.add_argument("--message", default="Built from scratch.",
                    help="text the app displays")
@@ -151,13 +200,31 @@ def main(argv=None):
                    help="icon color as 6 hex digits (default 1E88E5)")
     p.add_argument("--version-code", type=int, default=1)
     p.add_argument("--version-name", default="1.0")
+    p.add_argument("--spec", help="JSON app spec (widgets + actions); "
+                                  "overrides --package/--label/--message")
+    p.add_argument("--key", help="signing key PEM from `apkforge keygen`; "
+                                 "reuse it so updates install")
     p.add_argument("-o", "--out", default="app.apk", help="output APK path")
-    args = p.parse_args(argv)
+    args = p.parse_args(raw)
 
-    blob = build_apk(args.package, args.label, args.message, args.icon_color,
-                     args.version_code, args.version_name)
+    signing = _load_signing_key(args.key)
+    if args.spec:
+        from apkfs import appspec
+        import json
+        spec = json.loads(pathlib.Path(args.spec).read_text(encoding="utf-8"))
+        blob = appspec.build_from_spec(spec, signing_key=signing)
+        pkg = spec.get("package", "?")
+    else:
+        if not args.package:
+            p.error("--package is required (or use --spec)")
+        blob = build_apk(args.package, args.label, args.message,
+                         args.icon_color, args.version_code,
+                         args.version_name, signing_key=signing)
+        pkg = args.package
     pathlib.Path(args.out).write_bytes(blob)
-    print(f"wrote {args.out} ({len(blob)} bytes) — package {args.package}")
+    signed_with = args.key if args.key else "a throwaway key (use --key for updates)"
+    print(f"wrote {args.out} ({len(blob)} bytes) — package {pkg}")
+    print(f"signed with {signed_with}")
     return 0
 
 

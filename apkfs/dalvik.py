@@ -97,6 +97,17 @@ def const_string(reg, string_idx):
     return _u16(0x1A | ((reg & 0xFF) << 8)) + _u16(string_idx)
 
 
+def const32(reg, value):
+    """const vAA, #+BBBBBBBB — load a full 32-bit literal (format 31i)."""
+    v = value & 0xFFFFFFFF
+    return _u16(0x14 | ((reg & 0xFF) << 8)) + _u16(v & 0xFFFF) + _u16(v >> 16)
+
+
+def check_cast(reg, type_idx):
+    """check-cast vAA, type@BBBB — assert/cast the object's type (format 21c)."""
+    return _u16(0x1F | ((reg & 0xFF) << 8)) + _u16(type_idx)
+
+
 def new_instance(reg, type_idx):
     """new-instance vAA, type@BBBB — allocate an object (format 21c)."""
     return _u16(0x22 | ((reg & 0xFF) << 8)) + _u16(type_idx)
@@ -105,6 +116,11 @@ def new_instance(reg, type_idx):
 def return_void():
     """return-void (format 10x)."""
     return _u16(0x0E)
+
+
+def move_result(reg):
+    """move-result vAA — capture the int/boolean an invoke returned."""
+    return _u16(0x0A | ((reg & 0xFF) << 8))
 
 
 def move_result_object(reg):
@@ -172,6 +188,16 @@ class Assembler:
     def if_lt(self, rega, regb, target):
         """Branch to target if vA < vB (format 22t, 2 code units)."""
         self._items.append(("branch", (2, _ifcmp_enc(0x34, rega, regb), target)))
+        return self
+
+    def if_eq(self, rega, regb, target):
+        """Branch to target if vA == vB (format 22t, 2 code units)."""
+        self._items.append(("branch", (2, _ifcmp_enc(0x32, rega, regb), target)))
+        return self
+
+    def if_ne(self, rega, regb, target):
+        """Branch to target if vA != vB (format 22t, 2 code units)."""
+        self._items.append(("branch", (2, _ifcmp_enc(0x33, rega, regb), target)))
         return self
 
     def assemble(self):

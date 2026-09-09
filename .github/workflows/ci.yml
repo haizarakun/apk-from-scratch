@@ -22,6 +22,11 @@ jobs:
           done
       - name: Build an APK with the installed CLI
         run: apkforge --package com.example.ci --label "CI" --message "built in CI" -o /tmp/ci.apk
+      - name: Build a real app from a JSON spec with a persistent key
+        run: |
+          apkforge keygen -o /tmp/ci-key.pem
+          apkforge --spec examples/spec_app/app.json --key /tmp/ci-key.pem -o /tmp/spec.apk
+          python3 -m apkfs.verify /tmp/spec.apk
       - name: Verify signatures independently
         run: |
           python3 -m apkfs.verify examples/icon_app/icon_app.apk

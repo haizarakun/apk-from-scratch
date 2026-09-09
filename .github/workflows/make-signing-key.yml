@@ -1,0 +1,57 @@
+name: Create signing key
+
+# Make the one key you will sign every version of your app with. Run this
+# ONCE, then save the downloaded file's contents as the repository secret
+# APK_SIGNING_KEY (Settings -> Secrets and variables -> Actions -> New
+# repository secret). After that, "Make an APK (no coding)" signs with it
+# automatically, so newer versions install over older ones.
+#
+# IMPORTANT: the key is delivered as a run artifact. On a PUBLIC repository
+# anyone can download artifacts, so make your fork PRIVATE before running
+# this (Settings -> General -> Change visibility), and delete the artifact
+# from the run page once the secret is saved.
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Your name or app name (goes in the certificate)"
+        required: false
+        default: "my app signer"
+
+jobs:
+  keygen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install apk-from-scratch
+        run: pip install .
+      - name: Refuse to run on a public repository
+        if: ${{ !github.event.repository.private }}
+        run: |
+          echo "::error::This repository is PUBLIC. A signing key uploaded here could be downloaded by anyone. Make the repository private first (Settings -> General -> Change visibility), then run again."
+          exit 1
+      - name: Generate the key
+        run: apkforge keygen --name "${{ inputs.name }}" -o signing-key.pem
+      - name: Show what to do next
+        run: |
+          {
+            echo "## Your signing key is ready"
+            echo
+            echo "1. Download **signing-key** from the Artifacts box below and unzip it."
+            echo "2. Open \`signing-key.pem\` in a text editor and copy ALL of its text."
+            echo "3. Go to **Settings -> Secrets and variables -> Actions -> New repository secret**."
+            echo "4. Name: \`APK_SIGNING_KEY\` — Value: paste the text — Add secret."
+            echo "5. Come back to this run and **delete the artifact** (trash icon)."
+            echo
+            echo "Keep the file somewhere safe too. Losing it means you can never update the app."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the key (download, save as secret, then delete)
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-key
+          path: signing-key.pem
+          retention-days: 1

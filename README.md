@@ -45,7 +45,11 @@ APK は魔法ではなく、仕様化されたバイナリ形式を詰めた ZIP
 | ZIP パック + **v2/v3 署名**（EC P-256） | `apkfs/apk.py` | `zipalign` + `apksigner` |
 | 独立した暗号検証器 | `apkfs/verify.py` | `apksigner verify` |
 | **デコーダ**（AXML→XML、arsc→エントリ、DEX→要約） | `apkfs/decode.py` | `apktool d` |
+| **JSON だけで本格アプリ**（複数のテキスト/ボタン、タップで文字変更・サイト起動・通知） | `apkfs/appspec.py` | Android Studio の一部 |
+| **署名鍵の作成・保存・再利用**（同じ鍵で更新 → 上書きインストール可） | `apkfs/keys.py` | `keytool` + `apksigner` |
 | ビルド CLI / 解析 CLI | `apkfs/apkforge.py`, `apkfs/apkinspect.py` | Gradle / `aapt dump` |
+
+サンプル: `examples/spec_app/app.json`（ボタン3つ＋動き付きの本格アプリを JSON だけで）、`examples/counter`（タップ計数）、`examples/loop_sum`（ループ計算）、`examples/i18n`（日本語＋絵文字）など。
 
 日本語・絵文字を含む Unicode のアプリ名・表示文字列にも対応（DEX は MUTF-8、
 リソースは UTF-8、長さは UTF-16 コード単位で数える）。
@@ -63,6 +67,18 @@ adb install -r my.apk                        # 端末/エミュレータに導�
 
 オプションを覚えたくなければ、`apkforge` を**引数なし**で実行すると、質問に答えるだけで
 APK が作れる対話ウィザードが起動します。
+
+本格的なアプリと署名:
+
+```bash
+apkforge keygen -o mykey.pem                    # 署名鍵を1回だけ作る（大切に保管）
+apkforge --spec app.json --key mykey.pem -o my.apk   # JSON の設計図から本物のアプリ
+```
+
+`app.json` は「文字」「ボタン」「タップしたときの動き（文字変更／サイトを開く／通知）」を
+並べるだけの設計図です（例: [`examples/spec_app/app.json`](examples/spec_app/app.json)）。
+同じ `mykey.pem` で作り続ければ、新バージョンは古いものの上にそのまま
+インストールできます（`version_code` を上げるだけ）。
 
 開発時は `pip install -e ".[test]"`（androguard と pytest が入る）。
 各サンプルは `python3 examples/<name>/build.py` で直接ビルドできます。

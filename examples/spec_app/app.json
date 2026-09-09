@@ -1,0 +1,16 @@
+{
+  "package": "com.example.specapp",
+  "name": "Spec App",
+  "icon_color": "43A047",
+  "version_code": 1,
+  "version_name": "1.0",
+  "widgets": [
+    {"type": "text", "id": "title", "text": "こんにちは！ボタンを押してみて"},
+    {"type": "button", "text": "文字を変える",
+     "action": {"type": "set_text", "target": "title", "text": "変わりました ✅"}},
+    {"type": "button", "text": "サイトを開く",
+     "action": {"type": "open_url", "url": "https://github.com/haizarakun/apk-from-scratch"}},
+    {"type": "button", "text": "メッセージ",
+     "action": {"type": "toast", "text": "やあ！ 👋"}}
+  ]
+}
