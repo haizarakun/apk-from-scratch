@@ -208,6 +208,9 @@ def main(argv=None):
                         "'no Android Studio' path for real apps")
     p.add_argument("--html", metavar="FILE",
                    help="build a web app from a single HTML file")
+    p.add_argument("--permissions", default="",
+                   help="web app device features, comma-separated: "
+                        "camera,mic,location,vibrate,notify")
     p.add_argument("--key", help="signing key PEM from `apkforge keygen`; "
                                  "reuse it so updates install")
     p.add_argument("-o", "--out", default="app.apk", help="output APK path")
@@ -218,9 +221,11 @@ def main(argv=None):
         from apkfs import webapp
         if not args.package:
             p.error("--package is required with --web/--html")
+        perms = [x.strip() for x in args.permissions.split(",") if x.strip()]
         common = dict(package=args.package, label=args.label,
                       icon_rgb=args.icon_color, version_code=args.version_code,
-                      version_name=args.version_name, signing_key=signing)
+                      version_name=args.version_name, signing_key=signing,
+                      permissions=perms)
         if args.web:
             blob = webapp.build_from_dir(args.web, **common)
         else:

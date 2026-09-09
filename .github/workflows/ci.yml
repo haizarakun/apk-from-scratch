@@ -29,7 +29,7 @@ jobs:
           python3 -m apkfs.verify /tmp/spec.apk
       - name: Build a web app (HTML/JS in a WebView host)
         run: |
-          apkforge --web examples/web_app/site --package com.example.memo --label "Memo" --key /tmp/ci-key.pem -o /tmp/web.apk
+          apkforge --web examples/web_app/site --package com.example.memo --label "Memo" --permissions camera,mic,location,vibrate,notify --key /tmp/ci-key.pem -o /tmp/web.apk
           python3 -m apkfs.verify /tmp/web.apk
       - name: Verify signatures independently
         run: |

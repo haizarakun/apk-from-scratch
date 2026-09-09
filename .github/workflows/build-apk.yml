@@ -45,6 +45,10 @@ on:
         description: "Web app HTML — optional; paste a whole page (forms, screens, storage, fetch). Overrides the spec."
         required: false
         default: ""
+      permissions:
+        description: "Device features for the web app, comma-separated: camera,mic,location,vibrate,notify"
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -80,6 +84,7 @@ jobs:
           if [ -n "$APP_HTML" ]; then
             printf '%s' "$APP_HTML" > index.html
             apkforge --html index.html \
+              --permissions "${{ inputs.permissions }}" \
               --package "${{ inputs.app_id }}" \
               --label "${{ inputs.app_name }}" \
               --icon-color "${{ inputs.icon_color }}" \

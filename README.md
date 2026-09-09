@@ -47,7 +47,7 @@ APK は魔法ではなく、仕様化されたバイナリ形式を詰めた ZIP
 | **デコーダ**（AXML→XML、arsc→エントリ、DEX→要約） | `apkfs/decode.py` | `apktool d` |
 | **JSON だけで本格アプリ**（テキスト/ボタン/**画像**/**一覧**、スクロール、タップで文字変更・サイト起動・通知・**通信(fetch)**） | `apkfs/appspec.py` | Android Studio の一部 |
 | **署名鍵の作成・保存・再利用**（同じ鍵で更新 → 上書きインストール可） | `apkfs/keys.py` | `keytool` + `apksigner` |
-| **HTML/JS で何でもアプリ**（WebView ホストを自前生成し、フォーム・複数画面・保存・通信・共有・クリップボードを Web 技術で。複数クラス DEX） | `apkfs/webapp.py` | Android Studio + Cordova/Capacitor |
+| **HTML/JS で何でもアプリ**（WebView ホストを自前生成。フォーム・複数画面・保存・通信・共有・クリップボードに加え、**カメラ／マイク／現在地／写真の撮影・選択／通知／バイブ**を Web 標準 API から。実行時パーミッションも自動要求。複数クラス DEX） | `apkfs/webapp.py` | Android Studio + Cordova/Capacitor |
 | ビルド CLI / 解析 CLI | `apkfs/apkforge.py`, `apkfs/apkinspect.py` | Gradle / `aapt dump` |
 
 サンプル: `examples/spec_app/app.json`（ボタン3つ＋動き付きの本格アプリを JSON だけで）、`examples/counter`（タップ計数）、`examples/loop_sum`（ループ計算）、`examples/i18n`（日本語＋絵文字）など。
@@ -89,7 +89,9 @@ apkforge --web ./site --package com.yourname.memo --label "メモ帳" --key myke
 
 `./site/index.html`（＋CSS/JS/画像）がそのままアプリになります。`<script src="apkfs-bridge.js">` を
 入れると `App.toast / App.open / App.share / App.copy / App.exit` が JavaScript から使え、
-`alert()`・`localStorage`・`fetch()` はそのまま動きます（例: [`examples/web_app/site`](examples/web_app/site)）。
+`alert()`・`localStorage`・`fetch()` はそのまま動きます。`--permissions camera,mic,location,vibrate,notify` を付けると
+`getUserMedia`（カメラ/マイク）・`geolocation`（現在地）・`<input type=file capture>`（撮影/写真選択）・
+`navigator.vibrate`・`App.notify`（通知）も使えます（例: [`examples/web_app/site`](examples/web_app/site)）。
 
 開発時は `pip install -e ".[test]"`（androguard と pytest が入る）。
 各サンプルは `python3 examples/<name>/build.py` で直接ビルドできます。

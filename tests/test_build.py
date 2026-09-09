@@ -413,6 +413,41 @@ def test_webapp_host_has_bridge_and_assets():
     assert "android.permission.INTERNET" in decode.decode_axml(files["AndroidManifest.xml"])
 
 
+def test_webapp_device_bridge_permissions_and_handlers():
+    """Declaring device features produces manifest permissions, a runtime
+    permission request in onCreate, and the Chrome/Main handlers that let the
+    web standard camera/location/file-chooser/notification APIs work."""
+    from apkfs import webapp, decode
+    from androguard.core.dex import DEX
+    perms, runtime = webapp.resolve_permissions(["camera", "location", "notify"])
+    assert "android.permission.CAMERA" in perms
+    assert "android.permission.ACCESS_FINE_LOCATION" in runtime
+    d = DEX(webapp.build_dex("com.example.dev", runtime))
+    classes = {c.get_name(): c for c in d.get_classes()}
+    chrome_methods = {m.get_name() for m in classes["Lcom/example/dev/Chrome;"].get_methods()}
+    assert {"onPermissionRequest", "onGeolocationPermissionsShowPrompt",
+            "onShowFileChooser", "onJsAlert"} <= chrome_methods
+    main = classes["Lcom/example/dev/Main;"]
+    code = {m.get_name(): "\n".join(i.get_name() + " " + i.get_output()
+            for i in m.get_code().get_bc().get_instructions())
+            for m in main.get_methods() if m.get_code()}
+    assert "requestPermissions" in code["onCreate"] and "new-array" in code["onCreate"]
+    assert "setGeolocationEnabled" in code["onCreate"]
+    assert "NotificationChannel" in code["notify"] and "SDK_INT" in code["notify"]
+    assert "invoke-interface" in code["onActivityResult"]
+    files = webapp.build_files("com.example.dev", "Dev", (1, 2, 3),
+                               {"assets/index.html": b"<h1>x</h1>"},
+                               permissions=["camera", "vibrate"])
+    xml = decode.decode_axml(files["AndroidManifest.xml"])
+    assert "android.permission.CAMERA" in xml and "android.permission.VIBRATE" in xml
+    try:
+        webapp.resolve_permissions(["bluetooth"])
+    except webapp.WebAppError:
+        pass
+    else:
+        raise AssertionError("unknown permission accepted")
+
+
 def test_webapp_apk_from_dir_verifies(tmp_path):
     from apkfs import webapp
     site = tmp_path / "site"
@@ -597,6 +632,7 @@ if __name__ == "__main__":
     test_appspec_fetch_requires_https_and_text_target()
     test_multi_class_dex_defines_every_class()
     test_webapp_host_has_bridge_and_assets()
+    test_webapp_device_bridge_permissions_and_handlers()
     with tempfile.TemporaryDirectory() as d:
         test_webapp_apk_from_dir_verifies(pathlib.Path(d))
     test_same_key_signs_updates_with_same_certificate()

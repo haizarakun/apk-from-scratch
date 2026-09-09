@@ -25,6 +25,17 @@
 <h2>一覧</h2>
 <ul id="list"></ul>
 <input id="item" placeholder="項目を追加"><button onclick="addItem()">追加</button>
+<h2>端末の機能</h2>
+<div>
+  <button onclick="App.notify('メモ帳', memo.value || '（空）')">通知を出す</button>
+  <button onclick="navigator.vibrate(200)">バイブ</button>
+  <button onclick="where()">現在地</button>
+  <button onclick="cam()">カメラ</button>
+</div>
+<p id="geo"></p>
+<video id="v" autoplay playsinline muted style="width:100%;display:none;background:#000"></video>
+<p>写真を選ぶ／撮る: <input type="file" accept="image/*" capture onchange="pic(this)"></p>
+<img id="shot" style="max-width:100%;display:none">
 <h2>通信</h2>
 <button onclick="loadNews()">ネットから読み込む</button>
 <p id="news">（ここに結果）</p>
@@ -48,6 +59,24 @@
   function save() { localStorage.setItem("items", JSON.stringify(items)); render(); }
   function addItem() { if (item.value.trim()) { items.push(item.value.trim()); item.value = ""; save(); } }
   render();
+
+  // 端末の機能（ホストが許可を通すので、Web 標準 API がそのまま使える）
+  function where() {
+    geo.textContent = "取得中…";
+    navigator.geolocation.getCurrentPosition(
+      p => geo.textContent = `緯度 ${p.coords.latitude.toFixed(5)} / 経度 ${p.coords.longitude.toFixed(5)}`,
+      e => geo.textContent = "エラー: " + e.message);
+  }
+  async function cam() {
+    try {
+      v.style.display = "block";
+      v.srcObject = await navigator.mediaDevices.getUserMedia({ video: true });
+    } catch (e) { App.toast("カメラ: " + e); }
+  }
+  function pic(input) {
+    const f = input.files[0]; if (!f) return;
+    shot.src = URL.createObjectURL(f); shot.style.display = "block";
+  }
 
   // 通信: fetch（INTERNET 権限はホストが付与済み）
   async function loadNews() {

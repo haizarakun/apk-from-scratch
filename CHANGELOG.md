@@ -21,6 +21,20 @@ semantic versioning once it has a tagged release.
   decompression, and raise `MalformedError` instead of hanging or crashing on
   malformed/hostile input.
 
+### Device bridge for web apps (camera, location, photos, notifications)
+- Declare device features by name (`camera, mic, location, vibrate, notify`);
+  the host adds the manifest permissions and **requests the runtime
+  permissions on start** (`requestPermissions` with a hand-built String[]).
+- `WebChromeClient` now grants `getUserMedia` permission requests, answers
+  geolocation prompts, and opens the system chooser for `<input type=file>`
+  (photos / take a photo); `onActivityResult` hands the picked files back.
+- `App.notify(title, text)`: local notifications through a
+  `NotificationChannel` on API 26+ (toast fallback below), icon = launcher.
+- `setGeolocationEnabled`, media autoplay for camera preview.
+- New encoders: `new-array`, `aput-object`, `sget`, `invoke-interface`.
+- Push notifications (server-sent) are out of scope: they require Google's
+  messaging service registration.
+
 ### Web apps — the "no Android Studio" path
 - **Multi-class DEX**: `DexBuilder.add_class()` defines any number of classes
   (each with its own super, interfaces, fields, methods); the primary-class

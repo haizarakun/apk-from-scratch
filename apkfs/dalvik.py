@@ -50,6 +50,29 @@ def invoke_static(regs, method_idx):
     return _invoke_kind(0x71, regs, method_idx)
 
 
+def invoke_interface(regs, method_idx):
+    """invoke-interface {regs}, method — call through an interface type
+    (e.g. ValueCallback, GeolocationPermissions.Callback)."""
+    return _invoke_kind(0x72, regs, method_idx)
+
+
+def new_array(dest, size_reg, type_idx):
+    """new-array vA, vB, type@CCCC — allocate an array of vB elements
+    (format 22c; type is the array descriptor, e.g. [Ljava/lang/String;)."""
+    return _u16(0x23 | ((size_reg & 0xF) << 12) | ((dest & 0xF) << 8)) + _u16(type_idx)
+
+
+def aput_object(src, array, index):
+    """aput-object vAA, vBB, vCC — array[index] = src (format 23x)."""
+    return _u16(0x4D | ((src & 0xFF) << 8)) + _u16((array & 0xFF) | ((index & 0xFF) << 8))
+
+
+def sget(dest, field_idx):
+    """sget vAA, field@BBBB — read a static int field (format 21c), e.g.
+    Build.VERSION.SDK_INT."""
+    return _u16(0x60 | ((dest & 0xFF) << 8)) + _u16(field_idx)
+
+
 def iget(dest, obj, field_idx):
     """iget vA, vB, field@CCCC — read an int instance field (format 22c)."""
     return _u16(0x52 | ((obj & 0xF) << 12) | ((dest & 0xF) << 8)) + _u16(field_idx)
