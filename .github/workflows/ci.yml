@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the package with test extras
+        run: pip install -e ".[test]"
+      - name: Build every example APK
+        run: |
+          for e in hello hello_text icon_app counter loop_sum i18n; do
+            python3 "examples/$e/build.py"
+          done
+      - name: Build an APK with the installed CLI
+        run: apkforge --package com.example.ci --label "CI" --message "built in CI" -o /tmp/ci.apk
+      - name: Verify signatures independently
+        run: |
+          python3 -m apkfs.verify examples/icon_app/icon_app.apk
+          python3 -m apkfs.verify examples/counter/counter.apk
+          python3 -m apkfs.verify /tmp/ci.apk
+      - name: Inspect an APK (read side)
+        run: apkinspect examples/icon_app/icon_app.apk
+      - name: Run the test suite
+        run: python3 tests/test_build.py
