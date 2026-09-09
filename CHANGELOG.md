@@ -21,6 +21,21 @@ semantic versioning once it has a tagged release.
   decompression, and raise `MalformedError` instead of hanging or crashing on
   malformed/hostile input.
 
+### Web apps — the "no Android Studio" path
+- **Multi-class DEX**: `DexBuilder.add_class()` defines any number of classes
+  (each with its own super, interfaces, fields, methods); the primary-class
+  API is unchanged.
+- **WebView host** (`apkfs/webapp.py`): three hand-assembled classes — an
+  Activity with a full-screen WebView (JavaScript, DOM storage, file access),
+  a `WebViewClient` that turns `app://<cmd>?v=` navigations into native
+  calls (toast, open, share, copy, exit), and a `WebChromeClient` that shows
+  `alert()` as a toast. Back button walks web history. Your HTML/CSS/JS is
+  bundled under `assets/` with a generated `apkfs-bridge.js`.
+- `apkforge --web DIR` / `--html FILE`; the browser workflow accepts pasted
+  HTML. Example: `examples/web_app/site` (notes app with storage, list,
+  share, copy, fetch).
+- New encoders: `return`, `return-object`.
+
 ### Lists, images, networking (no code)
 - **App spec** grows `image` (from a file, an https URL, or base64; packed as a
   `drawable` resource and shown scaled to width), `list` (rows, each with an

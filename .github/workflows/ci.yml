@@ -27,6 +27,10 @@ jobs:
           apkforge keygen -o /tmp/ci-key.pem
           apkforge --spec examples/spec_app/app.json --key /tmp/ci-key.pem -o /tmp/spec.apk
           python3 -m apkfs.verify /tmp/spec.apk
+      - name: Build a web app (HTML/JS in a WebView host)
+        run: |
+          apkforge --web examples/web_app/site --package com.example.memo --label "Memo" --key /tmp/ci-key.pem -o /tmp/web.apk
+          python3 -m apkfs.verify /tmp/web.apk
       - name: Verify signatures independently
         run: |
           python3 -m apkfs.verify examples/icon_app/icon_app.apk

@@ -88,6 +88,52 @@ Actions → 左の **「Make an APK (no coding)」** → **Run workflow**。フ�
 好きな数だけ足せます。日本語・絵文字もそのまま使えます。
 `fetch` を使うと、アプリに「インターネット」の許可が自動で付きます（`https://` のみ）。
 
+### 何でもモード（HTML で書く — Android Studio がいらないやり方）
+
+「フォーム」「複数の画面」「保存」「通信」「アニメーション」… ブラウザでできることは
+**全部**アプリにできます。アプリの中身を **HTML** で書き、**Web app HTML** の欄に
+そのまま貼って **Run workflow** するだけ。ChatGPT や Claude に「〜というアプリの
+HTML を1ファイルで書いて」と頼んだものを貼ってもそのまま動きます。
+
+コピペ用テンプレ（メモ帳。保存・一覧・共有・通信つき）:
+
+```html
+<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>メモ</title>
+<style>body{font-family:sans-serif;padding:16px}textarea{width:100%;height:40vh;font-size:1rem}
+button{font-size:1rem;padding:10px;margin:6px 6px 0 0}</style></head><body>
+<h1>📝 メモ帳</h1>
+<textarea id="memo" placeholder="ここに書くと自動で保存されます"></textarea>
+<div><button onclick="App.toast('保存済み ✅')">保存確認</button>
+<button onclick="App.share(memo.value)">共有</button>
+<button onclick="App.copy(memo.value)">コピー</button></div>
+<h2>通信</h2><button onclick="load()">ネットから読み込む</button><p id="out"></p>
+<script src="apkfs-bridge.js"></script>
+<script>
+memo.value = localStorage.getItem("memo") || "";
+memo.oninput = () => localStorage.setItem("memo", memo.value);
+async function load(){ out.textContent="読み込み中…";
+  try{ out.textContent = await (await fetch("https://api.github.com/zen")).text(); }
+  catch(e){ out.textContent = "エラー: " + e; } }
+</script></body></html>
+```
+
+HTML から使えるアプリの機能（`<script src="apkfs-bridge.js">` を入れておく）:
+
+| 書くもの | 何が起きる |
+|---|---|
+| `App.toast("文字")` | 画面下に短いメッセージ |
+| `App.open("https://…")` | ブラウザでサイトを開く |
+| `App.share("文字")` | 共有シート（LINE などに送る） |
+| `App.copy("文字")` | クリップボードにコピー |
+| `App.exit()` | アプリを閉じる |
+| `alert("文字")` | そのまま使える（メッセージとして表示） |
+| `localStorage` | データ保存（アプリを閉じても残る） |
+| `fetch("https://…")` | 通信（インターネット許可は自動） |
+
+スマホの「戻る」ボタンは、ページの履歴を戻ります。画像や CSS/JS を別ファイルで
+持ちたい場合は、PC で `apkforge --web フォルダ` を使うとフォルダごと同梱できます。
+
 ### 更新するとき
 
 **Version number** を前回より1大きくして（1 → 2 → 3 …）もう一度作るだけ。

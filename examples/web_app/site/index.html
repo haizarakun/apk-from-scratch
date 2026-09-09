@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>メモ帳</title>
+<style>
+  body { font-family: sans-serif; margin: 0; padding: 16px; background: #fafafa; }
+  h1 { font-size: 1.4rem; margin: 0 0 12px; }
+  textarea { width: 100%; height: 40vh; font-size: 1rem; box-sizing: border-box; }
+  button { font-size: 1rem; padding: 10px 14px; margin: 6px 6px 0 0; }
+  ul { padding-left: 18px; } li { margin: 4px 0; }
+  #news { white-space: pre-wrap; background: #fff; padding: 8px; border: 1px solid #ddd; }
+</style>
+</head>
+<body>
+<h1>📝 メモ帳（スクラッチ製）</h1>
+<textarea id="memo" placeholder="ここに書くと自動で保存されます"></textarea>
+<div>
+  <button onclick="App.toast('保存済み ✅')">保存確認</button>
+  <button onclick="App.share(memo.value)">共有</button>
+  <button onclick="App.copy(memo.value)">コピー</button>
+  <button onclick="App.open('https://github.com/haizarakun/apk-from-scratch')">サイトを開く</button>
+</div>
+<h2>一覧</h2>
+<ul id="list"></ul>
+<input id="item" placeholder="項目を追加"><button onclick="addItem()">追加</button>
+<h2>通信</h2>
+<button onclick="loadNews()">ネットから読み込む</button>
+<p id="news">（ここに結果）</p>
+<script src="apkfs-bridge.js"></script>
+<script>
+  // 保存: localStorage（アプリを閉じても残る）
+  memo.value = localStorage.getItem("memo") || "";
+  memo.addEventListener("input", () => localStorage.setItem("memo", memo.value));
+
+  // 一覧: 追加・タップで削除
+  const items = JSON.parse(localStorage.getItem("items") || "[]");
+  function render() {
+    list.innerHTML = "";
+    items.forEach((t, i) => {
+      const li = document.createElement("li");
+      li.textContent = t + "  （タップで削除）";
+      li.onclick = () => { items.splice(i, 1); save(); };
+      list.appendChild(li);
+    });
+  }
+  function save() { localStorage.setItem("items", JSON.stringify(items)); render(); }
+  function addItem() { if (item.value.trim()) { items.push(item.value.trim()); item.value = ""; save(); } }
+  render();
+
+  // 通信: fetch（INTERNET 権限はホストが付与済み）
+  async function loadNews() {
+    news.textContent = "読み込み中…";
+    try {
+      const r = await fetch("https://api.github.com/zen");
+      news.textContent = await r.text();
+    } catch (e) {
+      news.textContent = "エラー: " + e;
+    }
+  }
+</script>
+</body>
+</html>

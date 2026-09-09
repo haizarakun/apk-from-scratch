@@ -41,6 +41,10 @@ on:
         description: "App spec (JSON) — optional; several widgets + actions"
         required: false
         default: ""
+      html:
+        description: "Web app HTML — optional; paste a whole page (forms, screens, storage, fetch). Overrides the spec."
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -69,10 +73,19 @@ jobs:
       - name: Build the APK
         env:
           APP_SPEC: ${{ inputs.app_spec }}
+          APP_HTML: ${{ inputs.html }}
         run: |
           KEYARG=""
           if [ -f signing-key.pem ]; then KEYARG="--key signing-key.pem"; fi
-          if [ -n "$APP_SPEC" ]; then
+          if [ -n "$APP_HTML" ]; then
+            printf '%s' "$APP_HTML" > index.html
+            apkforge --html index.html \
+              --package "${{ inputs.app_id }}" \
+              --label "${{ inputs.app_name }}" \
+              --icon-color "${{ inputs.icon_color }}" \
+              --version-code "${{ inputs.version_code }}" \
+              $KEYARG -o app.apk
+          elif [ -n "$APP_SPEC" ]; then
             printf '%s' "$APP_SPEC" > app.json
             python3 - <<'PY'
           import json, sys

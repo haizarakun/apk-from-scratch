@@ -47,6 +47,7 @@ APK は魔法ではなく、仕様化されたバイナリ形式を詰めた ZIP
 | **デコーダ**（AXML→XML、arsc→エントリ、DEX→要約） | `apkfs/decode.py` | `apktool d` |
 | **JSON だけで本格アプリ**（テキスト/ボタン/**画像**/**一覧**、スクロール、タップで文字変更・サイト起動・通知・**通信(fetch)**） | `apkfs/appspec.py` | Android Studio の一部 |
 | **署名鍵の作成・保存・再利用**（同じ鍵で更新 → 上書きインストール可） | `apkfs/keys.py` | `keytool` + `apksigner` |
+| **HTML/JS で何でもアプリ**（WebView ホストを自前生成し、フォーム・複数画面・保存・通信・共有・クリップボードを Web 技術で。複数クラス DEX） | `apkfs/webapp.py` | Android Studio + Cordova/Capacitor |
 | ビルド CLI / 解析 CLI | `apkfs/apkforge.py`, `apkfs/apkinspect.py` | Gradle / `aapt dump` |
 
 サンプル: `examples/spec_app/app.json`（ボタン3つ＋動き付きの本格アプリを JSON だけで）、`examples/counter`（タップ計数）、`examples/loop_sum`（ループ計算）、`examples/i18n`（日本語＋絵文字）など。
@@ -79,6 +80,16 @@ apkforge --spec app.json --key mykey.pem -o my.apk   # JSON の設計図から�
 並べるだけの設計図です。通信はバックグラウンドスレッド＋例外処理付きで生成され、失敗してもアプリは落ちません（例: [`examples/spec_app/app.json`](examples/spec_app/app.json)）。
 同じ `mykey.pem` で作り続ければ、新バージョンは古いものの上にそのまま
 インストールできます（`version_code` を上げるだけ）。
+
+Android Studio なしで「何でも」作るなら **HTML で書く**:
+
+```bash
+apkforge --web ./site --package com.yourname.memo --label "メモ帳" --key mykey.pem -o memo.apk
+```
+
+`./site/index.html`（＋CSS/JS/画像）がそのままアプリになります。`<script src="apkfs-bridge.js">` を
+入れると `App.toast / App.open / App.share / App.copy / App.exit` が JavaScript から使え、
+`alert()`・`localStorage`・`fetch()` はそのまま動きます（例: [`examples/web_app/site`](examples/web_app/site)）。
 
 開発時は `pip install -e ".[test]"`（androguard と pytest が入る）。
 各サンプルは `python3 examples/<name>/build.py` で直接ビルドできます。

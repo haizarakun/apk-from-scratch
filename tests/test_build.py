@@ -362,6 +362,70 @@ def test_appspec_fetch_requires_https_and_text_target():
         raise AssertionError(f"accepted bad fetch action: {action}")
 
 
+def test_multi_class_dex_defines_every_class():
+    import dalvik as dv
+    from dex import DexBuilder, Method
+    from androguard.core.dex import DEX
+    dx = DexBuilder("La/Main;", "Landroid/app/Activity;")
+    other = dx.add_class("La/Other;", "Ljava/lang/Object;")
+    a_ctor = dx.methodref("Landroid/app/Activity;", "<init>", "V", [])
+    o_ctor = dx.methodref("Ljava/lang/Object;", "<init>", "V", [])
+    dx.add_method(Method("<init>", ("V", []), 0x10001, 1, 1, 1, b""))
+    other.add_method(Method("<init>", ("V", []), 0x10001, 1, 1, 1, b""))
+    other.add_instance_field("n", "I")
+    dx.freeze()
+    dx._defined[0].code = dv.invoke_direct([0], dx.method_index(a_ctor)) + dv.return_void()
+    other.methods[0].code = dv.invoke_direct([0], dx.method_index(o_ctor)) + dv.return_void()
+    d = DEX(dx.build())
+    names = {c.get_name(): c for c in d.get_classes()}
+    assert set(names) == {"La/Main;", "La/Other;"}
+    assert names["La/Other;"].get_superclassname() == "Ljava/lang/Object;"
+    assert [f.get_name() for f in names["La/Other;"].get_fields()] == ["n"]
+
+
+def test_webapp_host_has_bridge_and_assets():
+    from apkfs import webapp, decode
+    from androguard.core.dex import DEX
+    d = DEX(webapp.build_dex("com.example.w"))
+    classes = {c.get_name(): c for c in d.get_classes()}
+    assert set(classes) == {"Lcom/example/w/Main;", "Lcom/example/w/Client;",
+                            "Lcom/example/w/Chrome;"}
+    assert classes["Lcom/example/w/Client;"].get_superclassname() == \
+        "Landroid/webkit/WebViewClient;"
+    client = classes["Lcom/example/w/Client;"]
+    sou = next(m for m in client.get_methods()
+               if m.get_name() == "shouldOverrideUrlLoading")
+    txt = "\n".join(i.get_name() + i.get_output()
+                    for i in sou.get_code().get_bc().get_instructions())
+    for cmd in webapp.COMMANDS:
+        assert f'"{cmd}"' in txt
+    assert "Landroid/net/Uri;->getQueryParameter" in txt
+    main = classes["Lcom/example/w/Main;"]
+    oc = next(m for m in main.get_methods() if m.get_name() == "onCreate")
+    oct_ = "\n".join(i.get_output() for i in oc.get_code().get_bc().get_instructions())
+    assert "setJavaScriptEnabled" in oct_ and "file:///android_asset/index.html" in oct_
+
+    html = "<!doctype html><script src=apkfs-bridge.js></script><h1>hi</h1>"
+    files = webapp.build_files("com.example.w", "W", (1, 2, 3), {
+        "assets/index.html": html.encode(),
+        "assets/apkfs-bridge.js": webapp.BRIDGE_JS.encode()})
+    assert "assets/index.html" in files
+    assert "android.permission.INTERNET" in decode.decode_axml(files["AndroidManifest.xml"])
+
+
+def test_webapp_apk_from_dir_verifies(tmp_path):
+    from apkfs import webapp
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_text("<h1>hello</h1>", encoding="utf-8")
+    (site / "style.css").write_text("h1{color:red}", encoding="utf-8")
+    blob = webapp.build_from_dir(site, "com.example.site", label="Site")
+    assert verify.verify(blob)["signature_ok"]
+    import apkinspect
+    names = set(apkinspect.read_zip_stored(blob))
+    assert {"assets/index.html", "assets/style.css", "assets/apkfs-bridge.js"} <= names
+
+
 def test_same_key_signs_updates_with_same_certificate():
     from apkfs import appspec, keys
     from cryptography.hazmat.primitives import serialization
@@ -531,5 +595,9 @@ if __name__ == "__main__":
     test_appspec_rejects_bad_specs()
     test_appspec_image_list_and_fetch()
     test_appspec_fetch_requires_https_and_text_target()
+    test_multi_class_dex_defines_every_class()
+    test_webapp_host_has_bridge_and_assets()
+    with tempfile.TemporaryDirectory() as d:
+        test_webapp_apk_from_dir_verifies(pathlib.Path(d))
     test_same_key_signs_updates_with_same_certificate()
     print("all tests passed")

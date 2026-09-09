@@ -106,34 +106,98 @@ class Method:
         self.tries = list(tries)
 
 
-class DexBuilder:
-    """Collects strings/types/protos/methods, then serializes a .dex.
+class ClassDef:
+    """One class defined in the DEX: its superclass, interfaces, instance
+    fields and methods. Created through DexBuilder.add_class()."""
 
-    Typical use:
-        dx = DexBuilder("Lcom/example/Main;", "Ljava/lang/Object;")
+    def __init__(self, builder, class_desc, super_desc):
+        self._b = builder
+        self.class_desc = class_desc
+        self.super_desc = super_desc
+        self.methods = []            # Method objects
+        self.instance_fields = []    # (field_key, access)
+        self.interfaces = []         # interface type descriptors
+        builder.type(class_desc)
+        builder.type(super_desc)
+
+    def add_instance_field(self, name, type_desc, access=0x2):
+        """Declare an instance field (access default: private). Returns the
+        field key for iget/iput."""
+        key = self._b.fieldref(self.class_desc, name, type_desc)
+        self.instance_fields.append((key, access))
+        return key
+
+    def add_interface(self, desc):
+        """Declare that this class implements the given interface."""
+        self._b.type(desc)
+        if desc not in self.interfaces:
+            self.interfaces.append(desc)
+
+    def add_method(self, method):
+        self._b.methodref(self.class_desc, method.name, method.proto[0],
+                          method.proto[1])
+        self.methods.append(method)
+        return method
+
+
+class DexBuilder:
+    """Collects strings/types/protos/fields/methods for one or more classes,
+    then serializes a .dex.
+
+    Typical use (one class):
+        dx = DexBuilder("Lcom/example/Main;", "Landroid/app/Activity;")
         dx.add_method(Method(...))
         data = dx.build()
+
+    More classes:
+        client = dx.add_class("Lcom/example/Client;",
+                              "Landroid/webkit/WebViewClient;")
+        client.add_method(Method(...))
+
+    The class named in the constructor is the "primary" class; add_method,
+    add_instance_field, add_interface and the class_desc/super_desc
+    attributes on the builder refer to it, for backwards compatibility.
     """
 
     def __init__(self, class_desc, super_desc):
-        self.class_desc = class_desc
-        self.super_desc = super_desc
         self._strings = []
         self._string_idx = {}
         self._types = []
         self._type_idx = {}
         self._protos = []
         self._proto_idx = {}
-        self._methods = []           # (class_desc, proto_key, name) tuples
-        self._method_idx = {}
-        self._defined = []           # Method objects for this class
+        self._method_idx = {}        # (class, proto_key, name) -> None until frozen
         self._field_idx = {}         # (class, type, name) -> None until frozen
-        self._instance_fields = []   # (field_key, access) defined by this class
-        self._interfaces = []        # interface type descriptors this class adds
-        self.str(class_desc)
-        self.str(super_desc)
-        self.type(class_desc)
-        self.type(super_desc)
+        self.classes = []
+        self.primary = self.add_class(class_desc, super_desc)
+
+    def add_class(self, class_desc, super_desc):
+        """Define another class in this DEX. Returns its ClassDef."""
+        cd = ClassDef(self, class_desc, super_desc)
+        self.classes.append(cd)
+        return cd
+
+    # --- primary-class conveniences (backwards compatible API) ---
+    @property
+    def class_desc(self):
+        return self.primary.class_desc
+
+    @property
+    def super_desc(self):
+        return self.primary.super_desc
+
+    @property
+    def _defined(self):
+        return self.primary.methods
+
+    def add_instance_field(self, name, type_desc, access=0x2):
+        return self.primary.add_instance_field(name, type_desc, access)
+
+    def add_interface(self, desc):
+        return self.primary.add_interface(desc)
+
+    def add_method(self, method):
+        return self.primary.add_method(method)
 
     def str(self, s):
         if s not in self._string_idx:
@@ -179,23 +243,6 @@ class DexBuilder:
         key = (cls, type_desc, name)
         self._field_idx.setdefault(key, None)
         return key
-
-    def add_instance_field(self, name, type_desc, access=0x2):
-        """Declare an instance field on this class (access default: private).
-        Returns the field key for iget/iput."""
-        key = self.fieldref(self.class_desc, name, type_desc)
-        self._instance_fields.append((key, access))
-        return key
-
-    def add_interface(self, desc):
-        """Declare that this class implements the given interface descriptor."""
-        self.type(desc)
-        if desc not in self._interfaces:
-            self._interfaces.append(desc)
-
-    def add_method(self, method):
-        self.methodref(self.class_desc, method.name, method.proto[0], method.proto[1])
-        self._defined.append(method)
 
     def freeze(self):
         """Sort every pool into its final on-disk order and assign the method
@@ -293,7 +340,8 @@ class DexBuilder:
         proto_ids_off = off; off += 12 * n_proto
         field_ids_off = off if n_field else 0; off += 8 * n_field
         method_ids_off = off; off += 8 * n_meth
-        class_defs_off = off; off += 32  # one class
+        n_class = len(self.classes)
+        class_defs_off = off; off += 32 * n_class
 
         data_start = off
         data = bytearray()
@@ -335,16 +383,18 @@ class DexBuilder:
             if params and key not in type_list_offsets:
                 type_list_offsets[key] = write_type_list(params)
 
-        interfaces_off = 0
-        if self._interfaces:
-            interfaces_off = write_type_list(self._interfaces)
+        interfaces_offs = {}
+        for cls in self.classes:
+            if cls.interfaces:
+                interfaces_offs[cls.class_desc] = write_type_list(cls.interfaces)
 
-        # --- code items ---
+        # --- code items (every method of every class) ---
         code_offsets = {}
-        for m in self._defined:
+        all_methods = [(cls, m) for cls in self.classes for m in cls.methods]
+        for cls, m in all_methods:
             while len(data) % 4:
                 data += b"\0"
-            code_offsets[m.name] = data_off()
+            code_offsets[(cls.class_desc, m.name)] = data_off()
             insns = m.code
             assert len(insns) % 2 == 0
             # code_item: registers, ins, outs, tries_size, debug_info_off(0),
@@ -369,35 +419,38 @@ class DexBuilder:
                     data += struct.pack("<IHH", start, end - start, off)
                 data += handler_list
 
-        # --- class_data: instance fields + direct methods ---
-        class_data_off = data_off()
-        cd = bytearray()
-        direct = [m for m in self._defined if m.direct]
-        virtual = [m for m in self._defined if not m.direct]
-        cd += uleb128(0) + uleb128(len(self._instance_fields))  # static, instance
-        cd += uleb128(len(direct)) + uleb128(len(virtual))      # direct, virtual
-        # Encoded fields use index deltas over field ids sorted ascending.
-        prev = 0
-        for key, access in sorted(self._instance_fields,
-                                  key=lambda kv: self._field_map[kv[0]]):
-            idx = self._field_map[key]
-            cd += uleb128(idx - prev) + uleb128(access)
-            prev = idx
-
-        def midx(m):
-            return method_map[(self.class_desc,
-                               (m.proto[0], tuple(m.proto[1])), m.name)]
-
-        # Direct and virtual method lists are each delta-encoded from zero,
-        # sorted by method index.
-        for group in (direct, virtual):
+        # --- class_data for each class: instance fields + methods ---
+        class_data_offs = {}
+        for cls in self.classes:
+            class_data_offs[cls.class_desc] = data_off()
+            cd = bytearray()
+            direct = [m for m in cls.methods if m.direct]
+            virtual = [m for m in cls.methods if not m.direct]
+            cd += uleb128(0) + uleb128(len(cls.instance_fields))  # static, instance
+            cd += uleb128(len(direct)) + uleb128(len(virtual))    # direct, virtual
+            # Encoded fields use index deltas over field ids sorted ascending.
             prev = 0
-            for m in sorted(group, key=midx):
-                idx = midx(m)
-                cd += uleb128(idx - prev) + uleb128(m.access) \
-                    + uleb128(code_offsets[m.name])
+            for key, access in sorted(cls.instance_fields,
+                                      key=lambda kv: self._field_map[kv[0]]):
+                idx = self._field_map[key]
+                cd += uleb128(idx - prev) + uleb128(access)
                 prev = idx
-        data += cd
+
+            def midx(m, _cls=cls):
+                return method_map[(_cls.class_desc,
+                                   (m.proto[0], tuple(m.proto[1])), m.name)]
+
+            # Direct and virtual method lists are each delta-encoded from
+            # zero, sorted by method index.
+            for group in (direct, virtual):
+                prev = 0
+                for m in sorted(group, key=midx):
+                    idx = midx(m)
+                    cd += uleb128(idx - prev) + uleb128(m.access) \
+                        + uleb128(code_offsets[(cls.class_desc, m.name)])
+                    prev = idx
+            data += cd
+        class_data_off = class_data_offs[self.classes[0].class_desc]
 
         # --- map list ---
         while len(data) % 4:
@@ -410,8 +463,8 @@ class DexBuilder:
         # Build the map list. Every section present must appear exactly once
         # with its true element count, and entries must be ordered by offset.
         type_list_min = min(
-            ([interfaces_off] if interfaces_off else [])
-            + list(type_list_offsets.values()), default=0)
+            list(interfaces_offs.values()) + list(type_list_offsets.values()),
+            default=0)
         entries = [
             (0x0000, 1, 0),                         # header_item
             (0x0001, n_str, string_ids_off),        # string_id_item
@@ -419,13 +472,13 @@ class DexBuilder:
             (0x0003, n_proto, proto_ids_off),       # proto_id_item
             (0x0004, n_field, field_ids_off),       # field_id_item
             (0x0005, n_meth, method_ids_off),       # method_id_item
-            (0x0006, 1, class_defs_off),            # class_def_item
-            (0x2001, len(self._defined),            # code_item
-             code_offsets[self._defined[0].name]),
+            (0x0006, n_class, class_defs_off),      # class_def_item
+            (0x2001, len(all_methods),              # code_item
+             min(code_offsets.values()) if code_offsets else 0),
             (0x1001, type_list_count, type_list_min),  # type_list
             (0x2002, n_str,                         # string_data_item
              string_data_offsets[0] if string_data_offsets else 0),
-            (0x2000, 1, class_data_off),            # class_data_item
+            (0x2000, n_class, class_data_off),      # class_data_item
             (0x1000, 1, map_off),                   # map_list
         ]
         entries = [e for e in entries if e[1] > 0]
@@ -453,15 +506,22 @@ class DexBuilder:
             method_ids += struct.pack("<HHI", self._type_idx[cls],
                                       self._proto_idx[(ret, params)],
                                       self._string_idx[name])
-        class_def = struct.pack(
-            "<IIIIIIII",
-            self._type_idx[self.class_desc], 0x1,  # class idx, access public
-            self._type_idx[self.super_desc], interfaces_off,  # superclass, interfaces
-            NO_INDEX, 0, class_data_off, 0,        # source, annotations, data, static
-        )
+        # One class_def_item per class, in definition order. A class must come
+        # after any superclass/interface defined in this same DEX; framework
+        # supers (Activity, WebViewClient, ...) impose no ordering.
+        class_defs = b""
+        for cls in self.classes:
+            class_defs += struct.pack(
+                "<IIIIIIII",
+                self._type_idx[cls.class_desc], 0x1,        # class idx, public
+                self._type_idx[cls.super_desc],             # superclass
+                interfaces_offs.get(cls.class_desc, 0),     # interfaces
+                NO_INDEX, 0,                                # source, annotations
+                class_data_offs[cls.class_desc], 0,         # class data, statics
+            )
 
         body = (string_ids + type_ids + proto_ids + field_ids + method_ids
-                + class_def + bytes(data))
+                + class_defs + bytes(data))
         file_size = HEADER + len(body)
 
         header = bytearray(HEADER)
@@ -474,8 +534,7 @@ class DexBuilder:
         struct.pack_into("<II", header, 0x48, n_proto, proto_ids_off)
         struct.pack_into("<II", header, 0x50, n_field, field_ids_off)
         struct.pack_into("<II", header, 0x58, n_meth, method_ids_off)
-        struct.pack_into("<II", header, 0x60, 1, class_defs_off)
-        struct.pack_into("<II", header, 0x68, len(body) + (HEADER - data_start) + data_start - HEADER, data_start)
+        struct.pack_into("<II", header, 0x60, n_class, class_defs_off)
         # data_size / data_off: data region spans from data_start to EOF.
         struct.pack_into("<II", header, 0x68, file_size - data_start, data_start)
         struct.pack_into("<I", header, 0x34, map_off)      # map_off

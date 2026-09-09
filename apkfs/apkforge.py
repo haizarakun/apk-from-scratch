@@ -202,13 +202,32 @@ def main(argv=None):
     p.add_argument("--version-name", default="1.0")
     p.add_argument("--spec", help="JSON app spec (widgets + actions); "
                                   "overrides --package/--label/--message")
+    p.add_argument("--web", metavar="DIR",
+                   help="build a web app: folder with index.html (+ css/js/"
+                        "images) bundled into a WebView host — the "
+                        "'no Android Studio' path for real apps")
+    p.add_argument("--html", metavar="FILE",
+                   help="build a web app from a single HTML file")
     p.add_argument("--key", help="signing key PEM from `apkforge keygen`; "
                                  "reuse it so updates install")
     p.add_argument("-o", "--out", default="app.apk", help="output APK path")
     args = p.parse_args(raw)
 
     signing = _load_signing_key(args.key)
-    if args.spec:
+    if args.web or args.html:
+        from apkfs import webapp
+        if not args.package:
+            p.error("--package is required with --web/--html")
+        common = dict(package=args.package, label=args.label,
+                      icon_rgb=args.icon_color, version_code=args.version_code,
+                      version_name=args.version_name, signing_key=signing)
+        if args.web:
+            blob = webapp.build_from_dir(args.web, **common)
+        else:
+            html = pathlib.Path(args.html).read_text(encoding="utf-8")
+            blob = webapp.build_from_html(html, **common)
+        pkg = args.package
+    elif args.spec:
         from apkfs import appspec
         import json
         spec = json.loads(pathlib.Path(args.spec).read_text(encoding="utf-8"))

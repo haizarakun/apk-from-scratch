@@ -118,6 +118,16 @@ def return_void():
     return _u16(0x0E)
 
 
+def return_value(reg):
+    """return vAA — return a 32-bit value (int/boolean) (format 11x)."""
+    return _u16(0x0F | ((reg & 0xFF) << 8))
+
+
+def return_object(reg):
+    """return-object vAA — return an object reference (format 11x)."""
+    return _u16(0x11 | ((reg & 0xFF) << 8))
+
+
 def move_exception(reg):
     """move-exception vAA — first instruction of a catch handler: take the
     thrown object (format 11x)."""
