@@ -99,9 +99,49 @@ def _hex_color(s):
     return tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
 
 
+def run_wizard():
+    """Ask a few plain questions and build an APK — no flags to remember.
+
+    Runs when `apkforge` is started with no arguments in a terminal. Every
+    prompt has a default shown in brackets; pressing Enter accepts it.
+    """
+    def ask(prompt, default):
+        got = input(f"{prompt} [{default}]: ").strip()
+        return got or default
+
+    print("apkforge — let's build an APK. Press Enter to accept each default.\n")
+    package = ask("App id (reverse-domain, e.g. com.yourname.hello)",
+                  "com.example.hello")
+    label = ask("App name (shown under the icon)", "My App")
+    message = ask("Text the app shows on screen", "Hello from my app!")
+    while True:
+        color = ask("Icon color (6 hex digits)", "1E88E5")
+        try:
+            rgb = _hex_color(color)
+            break
+        except argparse.ArgumentTypeError as exc:
+            print(f"  {exc}")
+    out = ask("Save the APK as", "app.apk")
+
+    blob = build_apk(package, label, message, rgb)
+    pathlib.Path(out).write_bytes(blob)
+    print(f"\nDone. Wrote {out} ({len(blob)} bytes).")
+    print("Install it on a phone with:  adb install -r " + out)
+    print("Or copy the .apk to your phone and open it (allow install from "
+          "this source).")
+    return 0
+
+
 def main(argv=None):
+    # No arguments at an interactive terminal -> friendly question-and-answer
+    # wizard, so a first-time user needs no flags at all.
+    import sys
+    if argv is None and len(sys.argv) == 1 and sys.stdin.isatty():
+        return run_wizard()
+
     p = argparse.ArgumentParser(
-        description="Build a signed Android APK with no Android SDK.")
+        description="Build a signed Android APK with no Android SDK. "
+                    "Run with no options for an interactive wizard.")
     p.add_argument("--package", required=True,
                    help="application id, e.g. com.example.hello")
     p.add_argument("--label", default="From Scratch", help="app name")

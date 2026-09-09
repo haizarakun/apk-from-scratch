@@ -21,6 +21,14 @@ semantic versioning once it has a tagged release.
   decompression, and raise `MalformedError` instead of hanging or crashing on
   malformed/hostile input.
 
+### Ease of use
+- **Browser-only build**: a `workflow_dispatch` GitHub Action ("Make an APK
+  (no coding)") lets anyone build an APK from a form and download it — no
+  command line or local setup. A step-by-step Japanese guide is in
+  `docs/EASY.ja.md`.
+- **Interactive wizard**: running `apkforge` with no arguments asks a few plain
+  questions and builds the APK, so no flags need to be remembered.
+
 ### Added
 - Binary `AndroidManifest.xml` (AXML) writer with typed attributes and
   resource references (`apkfs/axml.py`).

@@ -1,0 +1,51 @@
+name: Make an APK (no coding)
+
+# Build an APK from a form in your browser — no command line, no setup.
+# Go to the Actions tab, pick "Make an APK (no coding)", press "Run workflow",
+# fill in the boxes, and download the finished .apk from the run's Artifacts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_id:
+        description: "App id (reverse-domain, e.g. com.yourname.hello)"
+        required: true
+        default: "com.example.hello"
+      app_name:
+        description: "App name (shown under the icon)"
+        required: true
+        default: "My App"
+      message:
+        description: "Text the app shows on screen"
+        required: true
+        default: "Hello from my app!"
+      icon_color:
+        description: "Icon color (6 hex digits, e.g. 1E88E5)"
+        required: true
+        default: "1E88E5"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install apk-from-scratch
+        run: pip install .
+      - name: Build the APK
+        run: |
+          apkforge \
+            --package "${{ inputs.app_id }}" \
+            --label "${{ inputs.app_name }}" \
+            --message "${{ inputs.message }}" \
+            --icon-color "${{ inputs.icon_color }}" \
+            -o "app.apk"
+      - name: Check it is a valid, signed APK
+        run: python3 -m apkfs.verify app.apk
+      - name: Upload the APK to download
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: app.apk

@@ -3,6 +3,9 @@
 日本語がメインのドキュメントです。英語は簡易対応（[English (partial)](README.en.md)）。
 その他の言語には対応しません。
 
+> **プログラミングをしない方へ**: コマンド不要で、ブラウザのボタンだけで
+> アプリ（.apk）を作れます → **[いちばん簡単な使い方](docs/EASY.ja.md)**
+
 Android SDK も aapt も d8 も JDK も zipalign も apksigner も使わず、**Python だけ**で
 **署名済み・インストール可能な Android APK** を生成し、さらに**読み戻す**ツールキットです。
 依存は署名計算のための [`cryptography`](https://pypi.org/project/cryptography/) だけ。
@@ -57,6 +60,9 @@ apkforge --package com.example.app --label "My App" \
 apkinspect my.apk                            # 中身を表示
 adb install -r my.apk                        # 端末/エミュレータに導入
 ```
+
+オプションを覚えたくなければ、`apkforge` を**引数なし**で実行すると、質問に答えるだけで
+APK が作れる対話ウィザードが起動します。
 
 開発時は `pip install -e ".[test]"`（androguard と pytest が入る）。
 各サンプルは `python3 examples/<name>/build.py` で直接ビルドできます。
