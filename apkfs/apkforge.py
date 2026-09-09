@@ -212,7 +212,9 @@ def main(argv=None):
         from apkfs import appspec
         import json
         spec = json.loads(pathlib.Path(args.spec).read_text(encoding="utf-8"))
-        blob = appspec.build_from_spec(spec, signing_key=signing)
+        blob = appspec.build_from_spec(
+            spec, signing_key=signing,
+            base_dir=pathlib.Path(args.spec).resolve().parent)
         pkg = spec.get("package", "?")
     else:
         if not args.package:

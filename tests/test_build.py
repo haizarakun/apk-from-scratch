@@ -270,7 +270,7 @@ def test_appspec_generates_layout_and_dispatching_onclick():
         for i in m.get_code().get_bc().get_instructions())
         for m in cls.get_methods() if m.get_code()}
     on_create, on_click = code["onCreate"], code["onClick"]
-    assert on_create.count("new-instance") == 1 + 4     # layout + 4 widgets
+    assert on_create.count("new-instance") == 2 + 4     # scroll + layout + 4 widgets
     assert on_create.count("setOnClickListener") == 3   # only buttons w/ actions
     assert "LinearLayout;->setOrientation" in on_create
     assert "getId()" in on_click and on_click.count("if-ne") == 3
@@ -299,6 +299,67 @@ def test_appspec_rejects_bad_specs():
         except appspec.SpecError:
             continue
         raise AssertionError(f"spec accepted but should be rejected: {spec}")
+
+
+def test_appspec_image_list_and_fetch():
+    """Images, lists and a network fetch generate the expected structures:
+    ScrollView root, ImageView with drawable resource, list items as rows,
+    a Runnable with try/catch for the fetch, and the INTERNET permission."""
+    from apkfs import appspec, png, decode
+    from androguard.core.dex import DEX
+    import base64
+    tiny = base64.b64encode(png.solid_icon(size=8)).decode()
+    spec = {
+        "package": "com.example.full", "name": "Full",
+        "widgets": [
+            {"type": "text", "id": "out", "text": "-"},
+            {"type": "image", "src_base64": tiny},
+            {"type": "button", "text": "Load",
+             "action": {"type": "fetch", "url": "https://example.com/x",
+                        "target": "out"}},
+            {"type": "list", "items": [
+                {"text": "a"}, {"text": "b", "action": {"type": "toast", "text": "hi"}}]},
+        ],
+    }
+    d = DEX(appspec.build_dex(spec))
+    (cls,) = d.get_classes()
+    assert "Ljava/lang/Runnable;" in cls.get_interfaces()
+    methods = {m.get_name(): m for m in cls.get_methods()}
+    run = methods["run"].get_code()
+    assert run.get_tries_size() == 1                       # try/catch present
+    assert run.get_handlers().get_list()[0].get_catch_all_addr() > 0
+    run_txt = "\n".join(i.get_name() + i.get_output()
+                        for i in run.get_bc().get_instructions())
+    assert "Ljava/net/URL;" in run_txt and "Ljava/util/Scanner;" in run_txt
+    assert "move-exception" in run_txt and "Landroid/view/View;->post" in run_txt
+    oc = "\n".join(i.get_name() + i.get_output()
+                   for i in methods["onCreate"].get_code().get_bc().get_instructions())
+    assert "ScrollView" in oc and "ImageView;->setImageResource" in oc
+    # 1 text + 1 image + 1 button + 2 list rows = 5 views (+ scroll + layout)
+    assert oc.count("new-instance") == 5 + 2 + 1           # +1 LayoutParams
+
+    files = appspec.build_files(spec)
+    assert any(name.startswith("res/drawable/") for name in files)
+    xml = decode.decode_axml(files["AndroidManifest.xml"])
+    assert "android.permission.INTERNET" in xml
+    table = decode.read_arsc(files["resources.arsc"])
+    assert "img0" in table["com.example.full"]["drawable"]
+
+
+def test_appspec_fetch_requires_https_and_text_target():
+    from apkfs import appspec
+    base = {"package": "a.b", "widgets": [
+        {"type": "text", "id": "t", "text": "x"},
+        {"type": "image", "id": "pic", "src_base64": ""}]}
+    for action in ({"type": "fetch", "url": "http://insecure", "target": "t"},
+                   {"type": "fetch", "url": "https://ok", "target": "pic"}):
+        spec = {**base, "widgets": base["widgets"] + [
+            {"type": "button", "text": "b", "action": action}]}
+        try:
+            appspec.validate(spec)
+        except appspec.SpecError:
+            continue
+        raise AssertionError(f"accepted bad fetch action: {action}")
 
 
 def test_same_key_signs_updates_with_same_certificate():
@@ -468,5 +529,7 @@ if __name__ == "__main__":
     test_decoders_reject_malformed_input_cleanly()
     test_appspec_generates_layout_and_dispatching_onclick()
     test_appspec_rejects_bad_specs()
+    test_appspec_image_list_and_fetch()
+    test_appspec_fetch_requires_https_and_text_target()
     test_same_key_signs_updates_with_same_certificate()
     print("all tests passed")

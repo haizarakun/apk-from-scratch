@@ -21,6 +21,16 @@ semantic versioning once it has a tagged release.
   decompression, and raise `MalformedError` instead of hanging or crashing on
   malformed/hostile input.
 
+### Lists, images, networking (no code)
+- **App spec** grows `image` (from a file, an https URL, or base64; packed as a
+  `drawable` resource and shown scaled to width), `list` (rows, each with an
+  optional action), a **scrolling** root, and the **`fetch`** action: download
+  text from an https URL on a background `Thread` and show it in a widget.
+- **try/catch in the DEX writer** (`Method.tries`, catch-all handlers) so a
+  failed fetch shows the error instead of crashing; `move-exception` encoder.
+- `<uses-permission>` support in the manifest writer; INTERNET is added
+  automatically when a spec uses `fetch`.
+
 ### Real apps without code
 - **App spec** (`apkfs/appspec.py`): describe a screen in JSON — texts and
   buttons, each button with an action (`set_text`, `open_url`, `toast`) — and

@@ -158,12 +158,15 @@ def build(root):
 
 
 def manifest(package, activity, min_sdk=23, target_sdk=28,
-             label=None, icon=None, version_code=None, version_name=None):
+             label=None, icon=None, version_code=None, version_name=None,
+             permissions=()):
     """Build a launchable manifest.
 
     label/icon accept a Ref (e.g. Ref(0x7f010000)) resolving through
     resources.arsc, or a literal string. Omit them for the minimal, no-resource
     manifest. version_code/version_name set the manifest's version fields.
+    permissions: names such as "android.permission.INTERNET", emitted as
+    <uses-permission> elements.
     """
     manifest_attrs = {"package": package}
     if version_code is not None:
@@ -177,9 +180,14 @@ def manifest(package, activity, min_sdk=23, target_sdk=28,
     if icon is not None:
         app_attrs["android:icon"] = icon
 
+    permission_elements = [
+        Element("uses-permission", {"android:name": name})
+        for name in permissions
+    ]
     return build(Element("manifest", manifest_attrs, [
         Element("uses-sdk", {"android:minSdkVersion": min_sdk,
                              "android:targetSdkVersion": target_sdk}),
+        *permission_elements,
         Element("application", app_attrs, [
             Element("activity", {"android:name": activity, "android:exported": True}, [
                 Element("intent-filter", {}, [

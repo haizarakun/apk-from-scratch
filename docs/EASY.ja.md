@@ -57,9 +57,17 @@ Actions → 左の **「Make an APK (no coding)」** → **Run workflow**。フ�
 {"package":"com.yourname.myapp","name":"わたしのアプリ","icon_color":"43A047",
  "widgets":[
   {"type":"text","id":"title","text":"こんにちは！ボタンを押してみて"},
+  {"type":"image","src_url":"https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/240px-PNG_transparency_demonstration_1.png"},
   {"type":"button","text":"文字を変える","action":{"type":"set_text","target":"title","text":"変わりました ✅"}},
   {"type":"button","text":"サイトを開く","action":{"type":"open_url","url":"https://example.com"}},
-  {"type":"button","text":"メッセージ","action":{"type":"toast","text":"やあ！ 👋"}}
+  {"type":"button","text":"メッセージ","action":{"type":"toast","text":"やあ！ 👋"}},
+  {"type":"text","id":"news","text":"（ここに通信の結果が出ます）"},
+  {"type":"button","text":"ネットから読み込む","action":{"type":"fetch","url":"https://api.github.com/zen","target":"news"}},
+  {"type":"list","items":[
+    {"text":"一覧の項目 1"},
+    {"text":"一覧の項目 2（タップで開く）","action":{"type":"open_url","url":"https://example.com"}},
+    {"text":"一覧の項目 3"}
+  ]}
  ]}
 ```
 
@@ -67,14 +75,18 @@ Actions → 左の **「Make an APK (no coding)」** → **Run workflow**。フ�
 
 | 書くもの | 意味 |
 |---|---|
-| `{"type":"text","id":"名前","text":"文字"}` | 文字を表示。`id` は後で書き換える目印（任意） |
+| `{"type":"text","id":"名前","text":"文字"}` | 文字を表示。`id` は後で書き換える目印（任意）。`action` を付けるとタップできる |
 | `{"type":"button","text":"ボタンの文字","action":{...}}` | ボタン。押したときの `action` を1つ付けられる |
+| `{"type":"image","src_url":"https://…/画像.png"}` | **画像**を表示（画面幅に合わせて縮小）。PNG/JPG。`src_url` はネット上の画像のURL |
+| `{"type":"list","items":[{"text":"…"},{"text":"…","action":{...}}]}` | **一覧**。項目は上から並び、項目ごとに `action` を付けられる |
 | `{"type":"set_text","target":"名前","text":"新しい文字"}` | `id` が「名前」の文字を書き換える |
 | `{"type":"open_url","url":"https://..."}` | サイトをブラウザで開く |
 | `{"type":"toast","text":"文字"}` | 画面下に短いメッセージを出す |
+| `{"type":"fetch","url":"https://...","target":"名前"}` | **通信**。URL の中身（文字）を取ってきて `id` が「名前」の場所に表示。失敗してもアプリは落ちず、エラー内容を表示 |
 
-`widgets` の中身は上から順に縦に並びます。好きな数だけ足せます。
-日本語・絵文字もそのまま使えます。
+`widgets` の中身は上から順に縦に並び、画面に収まらなければ**スクロール**します。
+好きな数だけ足せます。日本語・絵文字もそのまま使えます。
+`fetch` を使うと、アプリに「インターネット」の許可が自動で付きます（`https://` のみ）。
 
 ### 更新するとき
 
@@ -107,6 +119,6 @@ Actions → 左の **「Make an APK (no coding)」** → **Run workflow**。フ�
 
 ---
 
-これで「文字とボタンと簡単な動きを持つ1画面アプリ」を、コードなし・ブラウザだけで
-作って更新までできます。もっと複雑な画面（一覧、画像、通信など）は Android Studio の
-領域ですが、**自分の手で本物の署名済みアプリを作る**ことは、ここで全部できます。
+これで「文字・ボタン・画像・一覧・通信」を持つスクロールする1画面アプリを、
+コードなし・ブラウザだけで作って更新までできます。複数画面・入力フォーム・カメラなど
+は今後の拡張ですが、**自分の手で本物の署名済みアプリを作る**ことは、ここで全部できます。

@@ -45,7 +45,7 @@ APK は魔法ではなく、仕様化されたバイナリ形式を詰めた ZIP
 | ZIP パック + **v2/v3 署名**（EC P-256） | `apkfs/apk.py` | `zipalign` + `apksigner` |
 | 独立した暗号検証器 | `apkfs/verify.py` | `apksigner verify` |
 | **デコーダ**（AXML→XML、arsc→エントリ、DEX→要約） | `apkfs/decode.py` | `apktool d` |
-| **JSON だけで本格アプリ**（複数のテキスト/ボタン、タップで文字変更・サイト起動・通知） | `apkfs/appspec.py` | Android Studio の一部 |
+| **JSON だけで本格アプリ**（テキスト/ボタン/**画像**/**一覧**、スクロール、タップで文字変更・サイト起動・通知・**通信(fetch)**） | `apkfs/appspec.py` | Android Studio の一部 |
 | **署名鍵の作成・保存・再利用**（同じ鍵で更新 → 上書きインストール可） | `apkfs/keys.py` | `keytool` + `apksigner` |
 | ビルド CLI / 解析 CLI | `apkfs/apkforge.py`, `apkfs/apkinspect.py` | Gradle / `aapt dump` |
 
@@ -75,8 +75,8 @@ apkforge keygen -o mykey.pem                    # 署名鍵を1回だけ作る�
 apkforge --spec app.json --key mykey.pem -o my.apk   # JSON の設計図から本物のアプリ
 ```
 
-`app.json` は「文字」「ボタン」「タップしたときの動き（文字変更／サイトを開く／通知）」を
-並べるだけの設計図です（例: [`examples/spec_app/app.json`](examples/spec_app/app.json)）。
+`app.json` は「文字」「ボタン」「画像」「一覧」と「タップしたときの動き（文字変更／サイトを開く／通知／**ネットから読み込む**）」を
+並べるだけの設計図です。通信はバックグラウンドスレッド＋例外処理付きで生成され、失敗してもアプリは落ちません（例: [`examples/spec_app/app.json`](examples/spec_app/app.json)）。
 同じ `mykey.pem` で作り続ければ、新バージョンは古いものの上にそのまま
 インストールできます（`version_code` を上げるだけ）。
 

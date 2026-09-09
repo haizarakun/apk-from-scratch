@@ -88,7 +88,7 @@ class Method:
     """
 
     def __init__(self, name, proto, access, registers, ins, outs, code,
-                 direct=True):
+                 direct=True, tries=()):
         self.name = name
         self.proto = proto
         self.access = access
@@ -99,6 +99,11 @@ class Method:
         # Constructors, static and private methods are "direct"; overrides and
         # interface implementations must be "virtual" so ART dispatches them.
         self.direct = direct
+        # Exception handling: a list of (start_unit, end_unit, handler_unit)
+        # in 16-bit code units; end is exclusive. Each is a catch-all handler
+        # (catches Throwable), which is what "keep the app alive on error"
+        # needs. Typed catches are not needed by the toolkit's examples.
+        self.tries = list(tries)
 
 
 class DexBuilder:
@@ -342,11 +347,27 @@ class DexBuilder:
             code_offsets[m.name] = data_off()
             insns = m.code
             assert len(insns) % 2 == 0
-            # code_item: registers, ins, outs, tries(0), debug_info_off(0),
-            # insns_size(code units). No debug info, no try/catch.
-            data += struct.pack("<HHHHII", m.registers, m.ins, m.outs, 0, 0,
-                                len(insns) // 2)
+            # code_item: registers, ins, outs, tries_size, debug_info_off(0),
+            # insns_size (code units), insns, then optional try/catch tables.
+            data += struct.pack("<HHHHII", m.registers, m.ins, m.outs,
+                                len(m.tries), 0, len(insns) // 2)
             data += insns
+            if m.tries:
+                # try_items must start 4-byte aligned: pad if insns_size is odd.
+                if (len(insns) // 2) % 2 == 1:
+                    data += b"\0\0"
+                # Every try here uses its own catch-all handler. Build the
+                # encoded_catch_handler_list first so try_items can point into
+                # it (handler_off is a byte offset from the list's start).
+                handler_list = bytearray(uleb128(len(m.tries)))
+                handler_offsets = []
+                for (_s, _e, handler_unit) in m.tries:
+                    handler_offsets.append(len(handler_list))
+                    # size = 0 (sleb128) -> no typed catches, catch-all follows
+                    handler_list += b"\x00" + uleb128(handler_unit)
+                for (start, end, _h), off in zip(m.tries, handler_offsets):
+                    data += struct.pack("<IHH", start, end - start, off)
+                data += handler_list
 
         # --- class_data: instance fields + direct methods ---
         class_data_off = data_off()

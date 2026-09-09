@@ -118,6 +118,12 @@ def return_void():
     return _u16(0x0E)
 
 
+def move_exception(reg):
+    """move-exception vAA — first instruction of a catch handler: take the
+    thrown object (format 11x)."""
+    return _u16(0x0D | ((reg & 0xFF) << 8))
+
+
 def move_result(reg):
     """move-result vAA — capture the int/boolean an invoke returned."""
     return _u16(0x0A | ((reg & 0xFF) << 8))
@@ -212,6 +218,9 @@ class Assembler:
             size = len(val) // 2 if kind == "raw" else val[0]
             layout.append((pos, kind, val))
             pos += size
+        # Keep label -> code-unit positions so callers can build try/catch
+        # ranges (Method.tries) from the same labels they branch to.
+        self.positions = dict(positions)
         # Second pass: emit, resolving branch offsets relative to the branch.
         out = bytearray()
         for at, kind, val in layout:
