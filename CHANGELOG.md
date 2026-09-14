@@ -21,6 +21,13 @@ semantic versioning once it has a tagged release.
   decompression, and raise `MalformedError` instead of hanging or crashing on
   malformed/hostile input.
 
+### Complete docs and the last CLI gaps
+- Docs (Japanese): `INSTALL.ja.md` (Windows/Mac/Linux/Termux/browser),
+  `USAGE.ja.md` (every option, spec field, bridge call, workflow input,
+  Python API), `RECIPES.ja.md`, `FAQ.ja.md`.
+- `--icon PNG` (also spec `icon`/`icon_base64`, workflow `icon_url`),
+  `--min-sdk` / `--target-sdk`, `--install` (adb).
+
 ### Device bridge for web apps (camera, location, photos, notifications)
 - Declare device features by name (`camera, mic, location, vibrate, notify`);
   the host adds the manifest permissions and **requests the runtime
