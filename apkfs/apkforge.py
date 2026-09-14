@@ -64,8 +64,20 @@ def _build_dex(class_desc, message):
     return dx.build()
 
 
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def icon_bytes(icon_rgb, icon_png=None):
+    """The launcher icon: a caller-supplied PNG, or a generated solid icon."""
+    if icon_png is None:
+        return png.solid_icon(rgb=icon_rgb)
+    if not icon_png.startswith(PNG_MAGIC):
+        raise ValueError("icon must be a PNG file")
+    return icon_png
+
+
 def package_files(package, label, icon_rgb, classes_dex, version_code=1,
-                  version_name="1.0"):
+                  version_name="1.0", icon_png=None, min_sdk=23, target_sdk=28):
     """Assemble the manifest, resources and icon around a classes.dex.
     Returns the {name: bytes} dict ready for apk.sign()."""
     activity = package + ".Main"
@@ -76,19 +88,21 @@ def package_files(package, label, icon_rgb, classes_dex, version_code=1,
          "entries": [(0, arsc.TYPE_STRING, 1)]},
     ])
     manifest = axml.manifest(
-        package, activity, label=axml.Ref(arsc.res_id(PACKAGE_ID, 1, 0)),
+        package, activity, min_sdk=min_sdk, target_sdk=target_sdk,
+        label=axml.Ref(arsc.res_id(PACKAGE_ID, 1, 0)),
         icon=axml.Ref(arsc.res_id(PACKAGE_ID, 2, 0)),
         version_code=version_code, version_name=version_name)
     return {
         "AndroidManifest.xml": manifest,
         "classes.dex": classes_dex,
         "resources.arsc": resources,
-        ICON_PATH: png.solid_icon(rgb=icon_rgb),
+        ICON_PATH: icon_bytes(icon_rgb, icon_png),
     }
 
 
 def build_apk(package, label, message, icon_rgb, version_code=1,
-              version_name="1.0", signing_key=None):
+              version_name="1.0", signing_key=None, icon_png=None,
+              min_sdk=23, target_sdk=28):
     """Assemble and sign a complete one-screen APK. Returns the bytes.
 
     signing_key: an optional (key, cert) pair from apkfs.keys. Pass the same
@@ -98,7 +112,8 @@ def build_apk(package, label, message, icon_rgb, version_code=1,
     class_desc = "L" + package.replace(".", "/") + "/Main;"
     files = package_files(package, label, icon_rgb,
                           _build_dex(class_desc, message),
-                          version_code, version_name)
+                          version_code, version_name, icon_png,
+                          min_sdk, target_sdk)
     if signing_key is None:
         key = apk.make_keypair()
         cert = apk.self_signed_cert(key)
@@ -213,10 +228,20 @@ def main(argv=None):
                         "camera,mic,location,vibrate,notify")
     p.add_argument("--key", help="signing key PEM from `apkforge keygen`; "
                                  "reuse it so updates install")
+    p.add_argument("--icon", metavar="PNG", help="launcher icon PNG "
+                   "(square, e.g. 192x192); default is a generated solid icon")
+    p.add_argument("--min-sdk", type=int, default=23,
+                   help="lowest Android API level to install on (default 23 = 6.0)")
+    p.add_argument("--target-sdk", type=int, default=28,
+                   help="API level the app is tested against (default 28)")
+    p.add_argument("--install", action="store_true",
+                   help="after building, install on the connected phone with adb")
     p.add_argument("-o", "--out", default="app.apk", help="output APK path")
     args = p.parse_args(raw)
 
     signing = _load_signing_key(args.key)
+    icon_png = pathlib.Path(args.icon).read_bytes() if args.icon else None
+    sdk = dict(min_sdk=args.min_sdk, target_sdk=args.target_sdk)
     if args.web or args.html:
         from apkfs import webapp
         if not args.package:
@@ -225,7 +250,7 @@ def main(argv=None):
         common = dict(package=args.package, label=args.label,
                       icon_rgb=args.icon_color, version_code=args.version_code,
                       version_name=args.version_name, signing_key=signing,
-                      permissions=perms)
+                      permissions=perms, icon_png=icon_png, **sdk)
         if args.web:
             blob = webapp.build_from_dir(args.web, **common)
         else:
@@ -236,6 +261,8 @@ def main(argv=None):
         from apkfs import appspec
         import json
         spec = json.loads(pathlib.Path(args.spec).read_text(encoding="utf-8"))
+        if icon_png is not None:
+            spec["_icon_png"] = icon_png       # CLI --icon overrides the spec
         blob = appspec.build_from_spec(
             spec, signing_key=signing,
             base_dir=pathlib.Path(args.spec).resolve().parent)
@@ -245,13 +272,29 @@ def main(argv=None):
             p.error("--package is required (or use --spec)")
         blob = build_apk(args.package, args.label, args.message,
                          args.icon_color, args.version_code,
-                         args.version_name, signing_key=signing)
+                         args.version_name, signing_key=signing,
+                         icon_png=icon_png, **sdk)
         pkg = args.package
     pathlib.Path(args.out).write_bytes(blob)
     signed_with = args.key if args.key else "a throwaway key (use --key for updates)"
     print(f"wrote {args.out} ({len(blob)} bytes) — package {pkg}")
     print(f"signed with {signed_with}")
+    if args.install:
+        return _adb_install(args.out)
     return 0
+
+
+def _adb_install(apk_path):
+    """Install with adb if it is available; explain clearly if it is not."""
+    import shutil
+    import subprocess
+    adb = shutil.which("adb")
+    if not adb:
+        print("adb not found. Copy the .apk to the phone and open it, or "
+              "install Android platform-tools and enable USB debugging.")
+        return 2
+    result = subprocess.run([adb, "install", "-r", apk_path])
+    return result.returncode
 
 
 if __name__ == "__main__":
