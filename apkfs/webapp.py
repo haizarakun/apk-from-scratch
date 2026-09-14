@@ -535,7 +535,8 @@ def collect_assets(web_dir):
 
 
 def build_files(package, label, icon_rgb, assets, version_code=1,
-                version_name="1.0", permissions=()):
+                version_name="1.0", permissions=(), icon_png=None,
+                min_sdk=23, target_sdk=28):
     """Assemble every file of a web-app APK. Returns {name: bytes}.
     permissions: friendly names (camera, mic, location, vibrate, notify)."""
     all_perms, runtime = resolve_permissions(permissions)
@@ -546,16 +547,17 @@ def build_files(package, label, icon_rgb, assets, version_code=1,
          "entries": [(0, arsc.TYPE_STRING, 1)]},
     ])
     manifest = axml.manifest(
-        package, package + ".Main",
+        package, package + ".Main", min_sdk=min_sdk, target_sdk=target_sdk,
         label=axml.Ref(arsc.res_id(PACKAGE_ID, 1, 0)),
         icon=axml.Ref(arsc.res_id(PACKAGE_ID, 2, 0)),
         version_code=version_code, version_name=version_name,
         permissions=all_perms)
+    from apkfs.apkforge import icon_bytes
     files = {
         "AndroidManifest.xml": manifest,
         "classes.dex": build_dex(package, runtime),
         "resources.arsc": resources,
-        ICON_PATH: png.solid_icon(rgb=icon_rgb),
+        ICON_PATH: icon_bytes(icon_rgb, icon_png),
     }
     files.update(assets)
     return files
@@ -572,19 +574,20 @@ def _sign(files, signing_key):
 
 def build_from_dir(web_dir, package, label="My Web App", icon_rgb=(0x1E, 0x88, 0xE5),
                    version_code=1, version_name="1.0", signing_key=None,
-                   permissions=()):
+                   permissions=(), icon_png=None, min_sdk=23, target_sdk=28):
     """Build and sign a web-app APK from a folder containing index.html."""
     files = build_files(package, label, icon_rgb, collect_assets(web_dir),
-                        version_code, version_name, permissions)
+                        version_code, version_name, permissions, icon_png,
+                        min_sdk, target_sdk)
     return _sign(files, signing_key)
 
 
 def build_from_html(html, package, label="My Web App", icon_rgb=(0x1E, 0x88, 0xE5),
                     version_code=1, version_name="1.0", signing_key=None,
-                    permissions=()):
+                    permissions=(), icon_png=None, min_sdk=23, target_sdk=28):
     """Build and sign a web-app APK from a single HTML string."""
     assets = {"assets/index.html": html.encode("utf-8"),
               "assets/apkfs-bridge.js": BRIDGE_JS.encode("utf-8")}
     files = build_files(package, label, icon_rgb, assets, version_code,
-                        version_name, permissions)
+                        version_name, permissions, icon_png, min_sdk, target_sdk)
     return _sign(files, signing_key)
