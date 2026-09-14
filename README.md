@@ -6,6 +6,14 @@
 > **プログラミングをしない方へ**: コマンド不要で、ブラウザのボタンだけで
 > アプリ（.apk）を作れます → **[いちばん簡単な使い方](docs/EASY.ja.md)**
 
+| ドキュメント | 内容 |
+|---|---|
+| [導入手順](docs/INSTALL.ja.md) | Windows / Mac / Linux / **Android スマホ本体（Termux）** / ブラウザのみ |
+| [使い方リファレンス](docs/USAGE.ja.md) | 全オプション・JSON 設計図の全フィールド・JavaScript の橋・Python API |
+| [レシピ集](docs/RECIPES.ja.md) | 「〜したい」から引く実例集 |
+| [FAQ](docs/FAQ.ja.md) | 詰まったとき・できないことの一覧 |
+| [フォーマット解説](docs/format.md) | APK の各バイナリ形式をバイト単位で（英語） |
+
 Android SDK も aapt も d8 も JDK も zipalign も apksigner も使わず、**Python だけ**で
 **署名済み・インストール可能な Android APK** を生成し、さらに**読み戻す**ツールキットです。
 依存は署名計算のための [`cryptography`](https://pypi.org/project/cryptography/) だけ。
@@ -89,7 +97,7 @@ apkforge --web ./site --package com.yourname.memo --label "メモ帳" --key myke
 
 `./site/index.html`（＋CSS/JS/画像）がそのままアプリになります。`<script src="apkfs-bridge.js">` を
 入れると `App.toast / App.open / App.share / App.copy / App.exit` が JavaScript から使え、
-`alert()`・`localStorage`・`fetch()` はそのまま動きます。`--permissions camera,mic,location,vibrate,notify` を付けると
+`alert()`・`localStorage`・`fetch()` はそのまま動きます。`--icon icon.png` で自作アイコン、`--install` で USB 接続の端末へ直接インストール。`--permissions camera,mic,location,vibrate,notify` を付けると
 `getUserMedia`（カメラ/マイク）・`geolocation`（現在地）・`<input type=file capture>`（撮影/写真選択）・
 `navigator.vibrate`・`App.notify`（通知）も使えます（例: [`examples/web_app/site`](examples/web_app/site)）。
 
