@@ -538,17 +538,27 @@ def build_files(spec, base_dir=None):
     uses_fetch = any(r.action and r.action["type"] == "fetch" for r in rows)
     manifest = axml.manifest(
         package, package + ".Main",
+        min_sdk=int(spec.get("min_sdk", 23)),
+        target_sdk=int(spec.get("target_sdk", 28)),
         label=axml.Ref(arsc.res_id(PACKAGE_ID, 1, 0)),
         icon=axml.Ref(arsc.res_id(PACKAGE_ID, 2, 0)),
         version_code=int(spec.get("version_code", 1)),
         version_name=str(spec.get("version_name", "1.0")),
         permissions=[INTERNET] if uses_fetch else [])
 
+    icon_png = spec.get("_icon_png")
+    if icon_png is None and spec.get("icon"):
+        icon_path = pathlib.Path(spec["icon"])
+        if base_dir is not None and not icon_path.is_absolute():
+            icon_path = pathlib.Path(base_dir) / icon_path
+        icon_png = icon_path.read_bytes()
+    elif icon_png is None and spec.get("icon_base64"):
+        icon_png = base64.b64decode(spec["icon_base64"])
     files = {
         "AndroidManifest.xml": manifest,
         "classes.dex": build_dex(spec),
         "resources.arsc": resources,
-        ICON_PATH: png.solid_icon(rgb=rgb),
+        ICON_PATH: apkforge.icon_bytes(rgb, icon_png),
     }
     for path, data in image_files:
         files[path] = data
