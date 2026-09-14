@@ -49,6 +49,10 @@ on:
         description: "Device features for the web app, comma-separated: camera,mic,location,vibrate,notify"
         required: false
         default: ""
+      icon_url:
+        description: "Launcher icon — optional https URL of a square PNG (e.g. 192x192). Default: a solid-color icon."
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -81,6 +85,10 @@ jobs:
         run: |
           KEYARG=""
           if [ -f signing-key.pem ]; then KEYARG="--key signing-key.pem"; fi
+          ICONARG=""
+          if [ -n "${{ inputs.icon_url }}" ]; then
+            curl -fsSL "${{ inputs.icon_url }}" -o icon.png && ICONARG="--icon icon.png"
+          fi
           if [ -n "$APP_HTML" ]; then
             printf '%s' "$APP_HTML" > index.html
             apkforge --html index.html \
@@ -89,7 +97,7 @@ jobs:
               --label "${{ inputs.app_name }}" \
               --icon-color "${{ inputs.icon_color }}" \
               --version-code "${{ inputs.version_code }}" \
-              $KEYARG -o app.apk
+              $KEYARG $ICONARG -o app.apk
           elif [ -n "$APP_SPEC" ]; then
             printf '%s' "$APP_SPEC" > app.json
             python3 - <<'PY'
@@ -98,7 +106,7 @@ jobs:
           spec.setdefault("version_code", int("${{ inputs.version_code }}" or 1))
           json.dump(spec, open("app.json", "w", encoding="utf-8"), ensure_ascii=False)
           PY
-            apkforge --spec app.json $KEYARG -o app.apk
+            apkforge --spec app.json $KEYARG $ICONARG -o app.apk
           else
             apkforge \
               --package "${{ inputs.app_id }}" \
@@ -106,7 +114,7 @@ jobs:
               --message "${{ inputs.message }}" \
               --icon-color "${{ inputs.icon_color }}" \
               --version-code "${{ inputs.version_code }}" \
-              $KEYARG -o app.apk
+              $KEYARG $ICONARG -o app.apk
           fi
 
       - name: Check it is a valid, signed APK
